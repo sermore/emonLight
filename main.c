@@ -16,12 +16,12 @@
 #define GPIO_PIN 17
 
 #define PPWH 1
-#define DT_MIN 1.0e-4
+#define DT_MIN 1.0e-3
 
 // the event counter 
-volatile long pulseCount = 0, rawCount = 0, lastPulseCount = 0;
-volatile double power = 0, elapsedkWh = 0, dt = -1;
-volatile struct timespec tstart, tnow, tlast = {0, 0};
+volatile static long pulseCount = 0, rawCount = 0, lastPulseCount = 0;
+volatile static double power = 0, elapsedkWh = 0, dt = -1;
+volatile static struct timespec tstart = {0, 0}, tnow = {0, 0}, tlast = {0, 0};
 
 double time_diff(volatile struct timespec tend, volatile struct timespec tstart) {
     double dt = 0.0 + (tend.tv_sec - tstart.tv_sec) + (tend.tv_nsec - tstart.tv_nsec) / 1.0e9;
@@ -55,10 +55,11 @@ void myInterrupt(void) {
             power = (3600.0 / dt) / PPWH;
             //Find kwh elapsed
             elapsedkWh = (1.0 * pulseCount / (PPWH * 1000)); //multiply by 1000 to pulses per wh to kwh convert wh to kwh
+//        } else {
+//            printf("YYYY R=%ld, PC=%ld, dt=%f\n", rawCount, pulseCount, dt);
         }
-        //printf("YYYY R=%ld, PC=%ld, dt=%f\n", rawCount, pulseCount, dt);
-    } else {
-        printf("XXXXX R=%ld, PC=%ld, dt=%f\n", rawCount, pulseCount, dt);
+//    } else {
+//        printf("XXXXX R=%ld, PC=%ld, dt=%f\n", rawCount, pulseCount, dt);
     }
     copy_time(&tlast, tnow);
 }
