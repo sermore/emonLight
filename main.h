@@ -64,6 +64,7 @@ struct cfg_t {
     int pin;
     char* api_key;
     int node_id;
+    char *datalog;
 };
 
 extern struct cfg_t cfg;

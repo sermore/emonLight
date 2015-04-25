@@ -42,6 +42,7 @@ struct cfg_t cfg = {
 struct send_queue send_q;
 int send_queue_length = 0;
 CURL *curl;
+FILE *fd_data = NULL;
 
 volatile int stop = 0;
 mqd_t mq;
@@ -69,10 +70,11 @@ void parse_opts(int argc, char **argv) {
             {"api-key", required_argument, 0, 'k'},
             {"node-id", required_argument, 0, 'n'},
             {"emocms-url", required_argument, 0, 'e'},
+            {"data-log", required_argument, 0, 'l'},
             {0, 0, 0, 0}
         };
 
-        c = getopt_long(argc, argv, "c:drsuq:vp:k:ne:", long_options, &option_index);
+        c = getopt_long(argc, argv, "c:drsuq:vp:k:ne:l:", long_options, &option_index);
         if (c == -1)
             break;
 
@@ -129,6 +131,9 @@ void parse_opts(int argc, char **argv) {
                     cfg.node_id = value;
                 }
                 break;
+            case 'l':
+                cfg.datalog = optarg;
+                break;
 
             case '?':
                 break;
@@ -171,7 +176,7 @@ const char* get_config_file(const char *config_file) {
 
 int read_config(const char *config_file) {
     config_t config; /*Returns all parameters in this structure */
-//    config_setting_t *setting;
+    //    config_setting_t *setting;
     const char *str1;
     int tmp;
 
@@ -203,6 +208,10 @@ int read_config(const char *config_file) {
                 else {
                     cfg.node_id = 1;
                 }
+            }
+            if (cfg.datalog == NULL) {
+                if (config_lookup_string(&config, "data-log", &str1))
+                    cfg.datalog = strdup(str1);
             }
         }
         if (cfg.receiver) {
@@ -371,6 +380,8 @@ void process_data() {
             }
             time_str(timestr, 31, &trec);
             L(LOG_DEBUG, "receive %s: DT=%f, P=%ld(%ld), Power=%f, Elapsed kWh=%f", timestr, dt, pulseCount, rawCount, power, elapsedkWh);
+            if (fd_data != NULL)
+                fprintf(fd_data, "%ld,%d,%f,%f,%ld,%ld\n", trec.tv_sec, trec.tv_nsec, power, elapsedkWh, pulseCount, rawCount);
         }
         time_copy(&tlast, trec);
     }
@@ -437,6 +448,10 @@ void run_as_sender() {
 
     TAILQ_INIT(&send_q);
     curl = curl_easy_init();
+    if (cfg.datalog != NULL) {
+        fd_data = fopen(cfg.datalog, "a+");
+        L(LOG_DEBUG, "log data to %s", cfg.datalog);
+    }
 
     do {
         struct timespec tout, tnow;
@@ -459,6 +474,10 @@ void run_as_sender() {
 
     cleanup_queue(mq);
     curl_easy_cleanup(curl);
+    if (fd_data != NULL) {
+        fclose(fd_data);
+        fd_data = NULL;
+    }
 }
 
 void run_as_receiver() {
