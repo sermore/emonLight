@@ -9,19 +9,19 @@ CND_DISTDIR=dist
 # Debug configuration
 CND_PLATFORM_Debug=GNU-Linux-x86
 CND_ARTIFACT_DIR_Debug=dist/Debug/GNU-Linux-x86
-CND_ARTIFACT_NAME_Debug=rpenergymeter
-CND_ARTIFACT_PATH_Debug=dist/Debug/GNU-Linux-x86/rpenergymeter
+CND_ARTIFACT_NAME_Debug=emonlight
+CND_ARTIFACT_PATH_Debug=dist/Debug/GNU-Linux-x86/emonlight
 CND_PACKAGE_DIR_Debug=dist/Debug/GNU-Linux-x86/package
-CND_PACKAGE_NAME_Debug=rpenergymeter.tar
-CND_PACKAGE_PATH_Debug=dist/Debug/GNU-Linux-x86/package/rpenergymeter.tar
+CND_PACKAGE_NAME_Debug=emonlight.tar
+CND_PACKAGE_PATH_Debug=dist/Debug/GNU-Linux-x86/package/emonlight.tar
 # Release configuration
 CND_PLATFORM_Release=GNU-Linux-x86
 CND_ARTIFACT_DIR_Release=dist/Release/GNU-Linux-x86
-CND_ARTIFACT_NAME_Release=rpenergymeter
-CND_ARTIFACT_PATH_Release=dist/Release/GNU-Linux-x86/rpenergymeter
+CND_ARTIFACT_NAME_Release=emonlight
+CND_ARTIFACT_PATH_Release=dist/Release/GNU-Linux-x86/emonlight
 CND_PACKAGE_DIR_Release=dist/Release/GNU-Linux-x86/package
-CND_PACKAGE_NAME_Release=rpenergymeter.tar
-CND_PACKAGE_PATH_Release=dist/Release/GNU-Linux-x86/package/rpenergymeter.tar
+CND_PACKAGE_NAME_Release=emonlight.tar
+CND_PACKAGE_PATH_Release=dist/Release/GNU-Linux-x86/package/emonlight.tar
 #
 # include compiler specific variables
 #
