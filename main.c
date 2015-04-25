@@ -171,17 +171,17 @@ const char* get_config_file(const char *config_file) {
 
 int read_config(const char *config_file) {
     config_t config; /*Returns all parameters in this structure */
-    config_setting_t *setting;
+//    config_setting_t *setting;
     const char *str1;
     int tmp;
 
-    config_file = get_config_file(config_file);
-    if (access(config_file, F_OK) != -1) {
+    const char *file = get_config_file(config_file);
+    if (access(file, F_OK) == 0) {
         /*Initialization */
         config_init(&config);
         /* Read the file. If there is an error, report it and exit. */
-        if (!config_read_file(&config, config_file)) {
-            fprintf(stderr, "\n%s:%d - %s\n", config_error_file(&config), config_error_line(&config), config_error_text(&config));
+        if (!config_read_file(&config, file)) {
+            L(LOG_WARNING, "\n%s:%d - %s", config_error_file(&config), config_error_line(&config), config_error_text(&config));
             config_destroy(&config);
             return 1;
         }
@@ -225,7 +225,7 @@ int read_config(const char *config_file) {
         config_destroy(&config);
     }
     if (cfg.sender && cfg.api_key == NULL) {
-        fprintf(stderr, "No value found for api-key.\n");
+        L(LOG_WARNING, "No value found for api-key.");
         return 2;
     }
     return 0;
@@ -234,11 +234,11 @@ int read_config(const char *config_file) {
 void pulse_interrupt(void) {
     struct timespec tnow;
     if (clock_gettime(CLOCK_REALTIME, &tnow)) {
-        perror("Unable to call clock_gettime");
+        L(LOG_WARNING, "%s: %s", "Unable to call clock_gettime", strerror(errno));
         return;
     }
     CHECK(0 <= mq_send(mq, (char*) &tnow, sizeof (struct timespec), 0));
-    syslog(LOG_DEBUG, "pulse received");
+    L(LOG_DEBUG, "pulse received");
 }
 
 mqd_t open_pulse_queue(int oflag) {
@@ -255,7 +255,7 @@ mqd_t open_pulse_queue(int oflag) {
     mq = mq_open(QUEUE_NAME, oflag, 0644, &attr);
     CHECK((mqd_t) - 1 != mq);
     CHECK(-1 != mq_getattr(mq, &attr));
-    syslog(LOG_INFO, "pulses in queue at startup %d, queue length %d\n", attr.mq_curmsgs, attr.mq_maxmsg);
+    L(LOG_INFO, "pulses in queue at startup %d, queue length %d", attr.mq_curmsgs, attr.mq_maxmsg);
 
     return mq;
 }
@@ -267,9 +267,9 @@ void cleanup_queue(mqd_t mq) {
     CHECK((mqd_t) - 1 != mq_close(mq));
     if (cfg.unlink_queue && attr.mq_curmsgs == 0) {
         CHECK((mqd_t) - 1 != mq_unlink(QUEUE_NAME));
-        syslog(LOG_INFO, "queue unlinked");
+        L(LOG_INFO, "queue unlinked");
     }
-    syslog(LOG_INFO, "exit, messages in queue %d", attr.mq_curmsgs);
+    L(LOG_INFO, "exit, messages in queue %d", attr.mq_curmsgs);
     closelog();
 }
 
@@ -288,14 +288,14 @@ void sig_handler(int signo) {
         cleanup_queue(mq);
         exit(0);
     } else {
-        syslog(LOG_DEBUG, "received termination request");
+        L(LOG_DEBUG, "received termination request");
         stop = 1;
     }
 }
 
 // buf needs to store 30 characters
 
-int timespec2str(char *buf, uint len, struct timespec * ts) {
+int time_str(char *buf, uint len, struct timespec * ts) {
     int ret;
     struct tm t;
 
@@ -316,9 +316,11 @@ int timespec2str(char *buf, uint len, struct timespec * ts) {
 }
 // TODO switch to SIMPLEQ
 
-struct send_entry * insert_entry(struct timespec trec, double power, double elapsedkWh, long pulseCount) {
+struct send_entry * insert_entry(struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount) {
     struct send_entry *entry = malloc(sizeof (struct send_entry));
+    time_copy(&entry->tlast, tlast);
     time_copy(&entry->trec, trec);
+    entry->dt = dt;
     entry->power = power;
     entry->elapsedkWh = elapsedkWh;
     entry->pulseCount = pulseCount;
@@ -336,11 +338,11 @@ void remove_entries(int cnt) {
         send_queue_length--;
     }
     CHECK(cnt == 0);
-    CHECK(send_queue_length > 0);
+    CHECK(send_queue_length >= 0);
 }
 
-double power_interpolation(long t, struct send_entry *p0, struct send_entry * p1) {
-    return p0->power + (p1->power - p0->power) / time_diff(p1->trec, p0->trec) * (t - p0->trec.tv_sec - p0->trec.tv_nsec / 1.0e9);
+double calc_power(double dt) {
+    return (3600.0 / dt) / PPWH;
 }
 
 void process_data() {
@@ -362,64 +364,55 @@ void process_data() {
             ++pulseCount;
             //Calculate power
             if (pulseCount > 1) {
-                power = (3600.0 / dt) / PPWH;
+                power = calc_power(dt);
                 //Find kwh elapsed
                 elapsedkWh = (1.0 * pulseCount / (PPWH * 1000)); //multiply by 1000 to pulses per wh to kwh convert wh to kwh
-                insert_entry(trec, power, elapsedkWh, pulseCount);
+                insert_entry(tlast, trec, dt, power, elapsedkWh, pulseCount);
             }
-            timespec2str(timestr, 31, &trec);
-            printf("receive %s: P=%ld(%ld), Power=%f, Elapsed kWh=%f, dt=%f\n", timestr, pulseCount, rawCount, power, elapsedkWh, dt);
-            syslog(LOG_DEBUG, "receive %s: P=%ld(%ld), Power=%f, Elapsed kWh=%f, dt=%f\n", timestr, pulseCount, rawCount, power, elapsedkWh, dt);
+            time_str(timestr, 31, &trec);
+            L(LOG_DEBUG, "receive %s: DT=%f, P=%ld(%ld), Power=%f, Elapsed kWh=%f", timestr, dt, pulseCount, rawCount, power, elapsedkWh);
         }
         time_copy(&tlast, trec);
     }
 }
 
 int build_url() {
-    char timestr[31];
+    // in case of no points were added, avoid to process data and wait for more 
+    if (TAILQ_EMPTY(&send_q))
+        return 0;
     int send_cnt = send_queue_length > 20 ? 20 : send_queue_length;
-    int cnt = 0, pcnt = 0;
-    char *pstr = stpcpy(send_buf, EMOCMS_URL EMOCMS_PATH);
+    int cnt = 0;
+    char *pstr = stpcpy(send_buf, cfg.emocms_url);
+    pstr = stpcpy(pstr, EMOCMS_PATH);
     pstr = stpcpy(pstr, "?apikey=");
     pstr = stpcpy(pstr, cfg.api_key);
     pstr = stpcpy(pstr, "&data=[");
-    long t0 = 0;
 
-    struct send_entry * p;
+    struct send_entry * p = TAILQ_FIRST(&send_q);
+    long t0 = p->tlast.tv_sec + 1;
 
     TAILQ_FOREACH(p, &send_q, entries) {
-        struct send_entry *next = p->entries.tqe_next;
-        if (next == NULL)
-            break;
-        if (next->trec.tv_sec != p->trec.tv_sec) {
-            long t = p->trec.tv_sec + (p->trec.tv_nsec > 0 ? 1 : 0);
-            if (t0 == 0) {
-                t0 = t;
-            }
-            double power = power_interpolation(t, p, next);
-            struct tm lt;
-            char strd[26];
-            strftime(strd, sizeof (strd), "%F %T", localtime_r(&t, &lt));
-            printf("prepare %s: P=%ld, Power=%f, Elapsed kWh=%f\n", strd, p->pulseCount, power, p->elapsedkWh);
-            syslog(LOG_DEBUG, "prepare %s: P=%ld, Power=%f, Elapsed kWh=%f", strd, p->pulseCount, power, p->elapsedkWh);
-
-            sprintf(pstr, "[%ld,1,%f,%f,%ld],", t - t0, power, p->elapsedkWh, p->pulseCount);
-            pstr += strlen(pstr);
-            pcnt++;
+        long t1 = p->tlast.tv_sec + 1;
+        long t2 = p->trec.tv_sec;
+        struct tm lt;
+        char strd[26];
+        strftime(strd, sizeof (strd), "%F %T", localtime_r(&t2, &lt));
+        L(LOG_DEBUG, "prepare %s: DT=%f, P=%ld, Power=%f, Elapsed kWh=%f", strd, p->dt, p->pulseCount, p->power, p->elapsedkWh);
+        if (t2 <= t1) {
+            sprintf(pstr, "[%ld,%d,%f,%f,%ld],", t1 - t0, cfg.node_id, p->power, p->elapsedkWh, p->pulseCount);
+        } else {
+            sprintf(pstr, "[%ld,%d,%f,%f,%ld],[%ld,%d,%f,%f,%ld],", t1 - t0, cfg.node_id, p->power, p->elapsedkWh, p->pulseCount, t2 - t0, cfg.node_id, p->power, p->elapsedkWh, p->pulseCount);
         }
+        pstr += strlen(pstr);
+        ++cnt;
         if (strlen(send_buf) > sizeof (send_buf) - 100)
             break;
-
-        if (++cnt + 1 >= send_cnt)
+        if (cnt >= send_cnt)
             break;
-
     }
     pstr[strlen(pstr) - 1] = ']';
     pstr += strlen(pstr);
     sprintf(pstr, "&time=%ld", t0);
-    // in case of no points were added, avoid to process data and wait for more 
-    if (pcnt == 0)
-        cnt = 0;
     return cnt;
 }
 
@@ -431,18 +424,16 @@ int send_data() {
     //    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
-        printf("send failed: %s : \"%s\"\n", curl_easy_strerror(res), send_buf);
-        syslog(LOG_WARNING, "send failed: %s : \"%s\"", curl_easy_strerror(res), send_buf);
+        L(LOG_WARNING, "send failed: %s : \"%s\"", curl_easy_strerror(res), send_buf);
     } else {
-        printf("send OK: \"%s\"\n", send_buf);
-        syslog(LOG_DEBUG, "send OK: \"%s\"", send_buf);
+        L(LOG_DEBUG, "send OK: \"%s\"", send_buf);
     }
     curl_easy_reset(curl);
     return res != CURLE_OK;
 }
 
 void run_as_sender() {
-    syslog(LOG_DEBUG, "running as sender");
+    L(LOG_DEBUG, "running as sender");
 
     TAILQ_INIT(&send_q);
     curl = curl_easy_init();
@@ -453,8 +444,8 @@ void run_as_sender() {
         do {
             process_data();
             CHECK(clock_gettime(CLOCK_REALTIME, &tnow) != -1);
-        } while (tnow.tv_sec < tout.tv_sec + TIMEOUT);
-        while (send_queue_length > 1 && !stop) {
+        } while (tnow.tv_sec < tout.tv_sec + TIMEOUT && !stop);
+        while (send_queue_length > 0) {
             int cnt = build_url();
             if (cnt > 0) {
                 if (!send_data()) {
@@ -471,7 +462,7 @@ void run_as_sender() {
 }
 
 void run_as_receiver() {
-    syslog(LOG_DEBUG, "running as receiver");
+    L(LOG_DEBUG, "running as receiver");
 
     // sets up the wiringPi library
     //    if (wiringPiSetupGpio() < 0) {
@@ -482,14 +473,14 @@ void run_as_receiver() {
     //    pullUpDnControl(17, PUD_UP);
 
     if (wiringPiSetupSys() < 0) {
-        fprintf(stderr, "Unable to setup wiringPi: %s\n", strerror(errno));
+        L(LOG_WARNING, "Unable to setup wiringPi: %s", strerror(errno));
         exit(1);
     }
 
     // set Pin 17/0 generate an interrupt on high-to-low transitions
     // and attach myInterrupt() to the interrupt
     if (wiringPiISR(cfg.pin, INT_EDGE_FALLING, &pulse_interrupt) < 0) {
-        fprintf(stderr, "Unable to setup ISR: %s\n", strerror(errno));
+        L(LOG_WARNING, "Unable to setup ISR: %s", strerror(errno));
         exit(1);
     }
 
@@ -521,7 +512,7 @@ int main(int argc, char **argv) {
 
     if (cfg.daemonize) {
         CHECK(daemon(0, 0) == 0);
-        syslog(LOG_DEBUG, "daemonized");
+        L(LOG_DEBUG, "daemonized");
     }
 
     int oflag = cfg.receiver && !cfg.sender ? O_WRONLY : !cfg.receiver && cfg.sender ? O_RDONLY : O_RDWR;

@@ -30,8 +30,9 @@
           <runcommandpicklistitem>"${OUTPUT_PATH}" -s 1024 -u</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}"</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" -v</runcommandpicklistitem>
+          <runcommandpicklistitem>"${OUTPUT_PATH}" -v -s</runcommandpicklistitem>
         </runcommandpicklist>
-        <runcommand>"${OUTPUT_PATH}" -v</runcommand>
+        <runcommand>"${OUTPUT_PATH}" -v -s</runcommand>
         <rundir></rundir>
         <buildfirst>true</buildfirst>
         <terminal-type>0</terminal-type>

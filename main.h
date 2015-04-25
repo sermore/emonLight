@@ -1,4 +1,4 @@
-/* 
+/*
  * File:   main.h
  * Author: Sergio
  *
@@ -13,7 +13,6 @@ extern "C" {
 #endif
 
 #include <sys/queue.h>
-    
 
 #define PPWH 1
 #define DT_MIN 1.0e-1
@@ -29,13 +28,21 @@ extern "C" {
         } \
     } while (0) \
 
+#define L(log_level, fmt, ...) \
+    if (cfg.verbose) { \
+        fprintf(log_level > LOG_INFO ? stderr : stdout, fmt, ##__VA_ARGS__); \
+        fprintf(log_level > LOG_INFO ? stderr : stdout, "\n"); \
+        syslog(log_level, fmt, ##__VA_ARGS__); \
+    } \
+
 #define TIMEOUT 5
 #define EMOCMS_URL "http://emoncms.org"
+/* http://emoncms.org/input/bulk.json?data=[[-10,16,1137],[-8,17,1437,3164],[-6,19,1412,3077]]&time=1429335402 */
 #define EMOCMS_PATH "/input/bulk.json"
-// http://emoncms.org/input/bulk.json?data=[[-10,16,1137],[-8,17,1437,3164],[-6,19,1412,3077]]&time=1429335402
 
 struct send_entry {
     TAILQ_ENTRY(send_entry) entries;
+    struct timespec tlast;
     struct timespec trec;
     double dt;
     double power;
