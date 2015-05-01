@@ -46,14 +46,17 @@ int clean_suite(void) {
     return 0;
 }
 
-void init_config(void) {
+int init_config(char * config) {
     bzero(&cfg, sizeof (cfg));
+    cfg.verbose = -1;
+    cfg.pin = -1;
+    cfg.node_id = -1;
     cfg.sender = 1;
     cfg.receiver = 1;
     cfg.daemonize = 0;
-    cfg.config = "tests/emonlight.conf";
-    CU_ASSERT_EQUAL(read_config(cfg.config), 0);
+    cfg.config = config;
     send_queue_length = 0;
+    return read_config(cfg.config);
 }
 
 void testGET_CONFIG_FILE(void) {
@@ -77,23 +80,13 @@ void testREAD_CONFIG(void) {
     CU_ASSERT_PTR_NULL(cfg.config);
     CU_ASSERT_EQUAL(cfg.pin, 0);
     CU_ASSERT_EQUAL(cfg.queue_size, 0);
-    cfg.sender = 1;
-    cfg.receiver = 1;
     CU_ASSERT_FALSE(access("tests/emonlight1.conf", F_OK));
-    CU_ASSERT_EQUAL(read_config("tests/emonlight1.conf"), 1);
-    bzero(&cfg, sizeof (cfg));
-    cfg.sender = 1;
-    cfg.receiver = 1;
-    cfg.config = "XXXXX";
-    CU_ASSERT_EQUAL(read_config(cfg.config), 2);
-    bzero(&cfg, sizeof (cfg));
-    cfg.config = "tests/emonlight.conf";
-    cfg.sender = 1;
-    cfg.receiver = 1;
-    CU_ASSERT_EQUAL_FATAL(read_config(cfg.config), 0);
+    CU_ASSERT_EQUAL(init_config("tests/emonlight1.conf"), 1);
+    CU_ASSERT_EQUAL(init_config("XXXX"), 2);
+    CU_ASSERT_EQUAL_FATAL(init_config("tests/emonlight.conf"), 0);
     CU_ASSERT_STRING_EQUAL(cfg.api_key, "1234567890KK");
     CU_ASSERT_STRING_EQUAL(cfg.emocms_url, "http://xx.yy.zz");
-//    printf("P=%d, Q=%d\n", cfg.pin, cfg.queue_size);
+    //    printf("P=%d, Q=%d\n", cfg.pin, cfg.queue_size);
     CU_ASSERT_EQUAL(cfg.pin, 12);
     CU_ASSERT_EQUAL(cfg.queue_size, 345);
     CU_ASSERT_EQUAL(cfg.node_id, 56);
@@ -130,7 +123,7 @@ void testINSERT_ENTRY(void) {
 }
 
 void testBUILD_URL(void) {
-    init_config();
+    CU_ASSERT_EQUAL(init_config("tests/emonlight.conf"), 0);
     cfg.verbose = 0;
     TAILQ_INIT(&send_q);
     struct timespec t0 = {1234567890, 123456789};
@@ -176,7 +169,7 @@ void testBUILD_URL(void) {
     CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
     CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567905);
     cnt = build_url();
-//    printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(0.5), cnt, strlen(send_buf), send_buf);
+    //    printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(0.5), cnt, strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 5);
     CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1],[10,56,3600.000000,0.004000,2],[11,56,1200.000000,0.005000,3],[13,56,1200.000000,0.005000,3],[14,56,7200.000000,0.006000,4],[14,56,9000.000000,0.007000,5]]&time=1234567891");
 }

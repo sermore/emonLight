@@ -9,7 +9,8 @@
     <logicalFolder name="ResourceFiles"
                    displayName="Resource Files"
                    projectFiles="true">
-      <itemPath>init.sh</itemPath>
+      <itemPath>scripts/emonlight_init.sh</itemPath>
+      <itemPath>scripts/emonlight_start.sh</itemPath>
     </logicalFolder>
     <logicalFolder name="SourceFiles"
                    displayName="Source Files"
@@ -32,6 +33,7 @@
                    kind="IMPORTANT_FILES_FOLDER">
       <itemPath>Makefile</itemPath>
     </logicalFolder>
+    <itemPath>scripts/config</itemPath>
   </logicalFolder>
   <projectmakefile>Makefile</projectmakefile>
   <confs>
@@ -59,11 +61,23 @@
           </linkerLibItems>
         </linkerTool>
       </folder>
-      <item path="init.sh" ex="false" tool="3" flavor2="0">
-      </item>
+      <folder path="TestFiles/f2">
+        <linkerTool>
+          <output>${TESTDIR}/TestFiles/f2</output>
+          <linkerLibItems>
+            <linkerOptionItem>-lcunit</linkerOptionItem>
+          </linkerLibItems>
+        </linkerTool>
+      </folder>
       <item path="main.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="main.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="scripts/config" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="scripts/emonlight_init.sh" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="scripts/emonlight_start.sh" ex="false" tool="3" flavor2="0">
       </item>
       <item path="tests/cunittest.c" ex="false" tool="0" flavor2="0">
       </item>
@@ -100,11 +114,23 @@
           </linkerLibItems>
         </linkerTool>
       </folder>
-      <item path="init.sh" ex="false" tool="3" flavor2="0">
-      </item>
+      <folder path="TestFiles/f2">
+        <linkerTool>
+          <output>${TESTDIR}/TestFiles/f2</output>
+          <linkerLibItems>
+            <linkerOptionItem>-lcunit</linkerOptionItem>
+          </linkerLibItems>
+        </linkerTool>
+      </folder>
       <item path="main.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="main.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="scripts/config" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="scripts/emonlight_init.sh" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="scripts/emonlight_start.sh" ex="false" tool="3" flavor2="0">
       </item>
       <item path="tests/cunittest.c" ex="false" tool="0" flavor2="0">
       </item>

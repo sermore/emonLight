@@ -14,8 +14,8 @@ extern "C" {
 
 #include <sys/queue.h>
 
-#define PPWH 1
 #define DT_MIN 1.0e-1
+#define DT_MAX 3600
 
 #define QUEUE_NAME  "/emonLight_queue"
 
@@ -53,18 +53,28 @@ struct send_entry {
 TAILQ_HEAD(send_queue, send_entry);
 
 struct cfg_t {
-    char *config;
-    char *emocms_url;
-    int daemonize;
-    int receiver;
-    int sender;
-    int unlink_queue;
+    const char *config;
+    const char *emocms_url;
+    short daemonize;
+    short receiver;
+    short sender;
+    short unlink_queue;
     int queue_size;
-    int verbose;
-    int pin;
+    short verbose;
+    short ppkwh;
+    short pin;
     char* api_key;
     int node_id;
-    char *datalog;
+    char *data_log;
+    short data_log_defaults;
+    FILE *datalog_file;
+    const char *pid_path;
+    char *data_store;
+    const char *homedir;
+    struct timespec tstart;
+    struct timespec tlast;
+    struct timespec tnow;
+    long pulseCount;
 };
 
 extern struct cfg_t cfg;

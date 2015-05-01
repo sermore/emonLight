@@ -29,31 +29,43 @@ struct cfg_t cfg = {
     .config = NULL,
     .emocms_url = NULL,
     .daemonize = 0,
-    .receiver = 1,
-    .sender = 1,
+    .receiver = 0,
+    .sender = 0,
     .unlink_queue = 0,
     .queue_size = 0,
-    .verbose = 0,
-    .pin = 0,
+    .verbose = -1,
+    .pin = -1,
+    .ppkwh = 0,
     .api_key = NULL,
-    .node_id = 0
+    .node_id = -1,
+    .data_log = NULL,
+    .data_log_defaults = 0,
+    .datalog_file = NULL,
+    .pid_path = NULL,
+    .data_store = NULL,
+    .homedir = NULL,
+    .tstart =
+    {0L, 0L},
+    .tlast =
+    {0L, 0L},
+    .tnow =
+    {0L, 0L},
+    .pulseCount = 0L
 };
 
 struct send_queue send_q;
 int send_queue_length = 0;
-CURL *curl;
-FILE *fd_data = NULL;
+CURL *curl = NULL;
+int pidFilehandle = -1;
 
 volatile int stop = 0;
-mqd_t mq;
-long pulseCount = 0, rawCount = 0;
-struct timespec tstart, tlast = {0, 0};
+mqd_t mq = -1;
+long rawCount = 0;
 char send_buf[1024];
 
 void parse_opts(int argc, char **argv) {
     int c;
     int value = 0;
-    int preceiver = 0, psender = 0;
 
     while (1) {
         int this_option_optind = optind ? optind : 1;
@@ -70,11 +82,14 @@ void parse_opts(int argc, char **argv) {
             {"api-key", required_argument, 0, 'k'},
             {"node-id", required_argument, 0, 'n'},
             {"emocms-url", required_argument, 0, 'e'},
-            {"data-log", required_argument, 0, 'l'},
+            {"data-log", optional_argument, 0, 'l'},
+            {"pid-path", required_argument, 0, 't'},
+            {"data-store", required_argument, 0, 'a'},
+            {"pulses-per-kilowatt-hour", required_argument, 0, 'w'},
             {0, 0, 0, 0}
         };
 
-        c = getopt_long(argc, argv, "c:drsuq:vp:k:ne:l:", long_options, &option_index);
+        c = getopt_long(argc, argv, "c:drsuq:vp:k:ne:l::t:a:w:", long_options, &option_index);
         if (c == -1)
             break;
 
@@ -92,11 +107,11 @@ void parse_opts(int argc, char **argv) {
                 break;
 
             case 'r':
-                preceiver = 1;
+                cfg.receiver = 1;
                 break;
 
             case 's':
-                psender = 1;
+                cfg.sender = 1;
                 break;
 
             case 'p':
@@ -132,19 +147,39 @@ void parse_opts(int argc, char **argv) {
                 }
                 break;
             case 'l':
-                cfg.datalog = optarg;
+                cfg.data_log_defaults = optarg == NULL;
+                cfg.data_log = optarg;
                 break;
-
+            case 't':
+                cfg.pid_path = optarg;
+                break;
+            case 'a':
+                cfg.data_store = optarg;
+                break;
+            case 'w':
+                value = strtol(optarg, NULL, 10);
+                if (value > 0) {
+                    cfg.ppkwh = value;
+                }
+                break;
             case '?':
+                L(LOG_WARNING, "unable to parse input parameters");
+                exit(2);
                 break;
-
             default:
-                printf("?? getopt returned character code 0%o ??\n", c);
+                L(LOG_WARNING, "?? getopt returned character code 0%o ??\n", c);
+                exit(3);
         }
     }
-    if (preceiver || psender) {
-        cfg.receiver = preceiver;
-        cfg.sender = psender;
+    if (strstr(argv[0], "emonlight-send") != NULL) {
+        cfg.sender = 1;
+        cfg.receiver = 0;
+    } else if (strstr(argv[0], "emonlight-rec") != NULL) {
+        cfg.sender = 0;
+        cfg.receiver = 1;
+    } else if (!cfg.receiver && !cfg.sender) {
+        cfg.receiver = 1;
+        cfg.sender = 1;
     }
     if (optind < argc) {
         printf("non-option ARGV-elements: ");
@@ -154,17 +189,22 @@ void parse_opts(int argc, char **argv) {
     }
 }
 
+const char *get_homedir() {
+    if (cfg.homedir == NULL) {
+        if ((cfg.homedir = getenv("HOME")) == NULL) {
+            cfg.homedir = getpwuid(getuid())->pw_dir;
+        }
+    }
+    return cfg.homedir;
+}
+
 const char* get_config_file(const char *config_file) {
     const char *dest_file;
     if (config_file == NULL) {
         if (cfg.daemonize) {
             dest_file = "/etc/emonlight.conf";
         } else {
-            const char *homedir;
-            if ((homedir = getenv("HOME")) == NULL) {
-                homedir = getpwuid(getuid())->pw_dir;
-            }
-            strcpy(send_buf, homedir);
+            strcpy(send_buf, get_homedir());
             strcat(send_buf, "/.emonlight");
             dest_file = strdup(send_buf);
         }
@@ -175,47 +215,78 @@ const char* get_config_file(const char *config_file) {
 }
 
 int read_config(const char *config_file) {
-    config_t config; /*Returns all parameters in this structure */
-    //    config_setting_t *setting;
-    const char *str1;
+    config_t config;
+    const char *str;
     int tmp;
 
-    const char *file = get_config_file(config_file);
-    if (access(file, F_OK) == 0) {
+    cfg.config = get_config_file(config_file);
+    if (access(cfg.config, F_OK) == 0) {
         /*Initialization */
         config_init(&config);
         /* Read the file. If there is an error, report it and exit. */
-        if (!config_read_file(&config, file)) {
+        if (!config_read_file(&config, cfg.config)) {
             L(LOG_WARNING, "\n%s:%d - %s", config_error_file(&config), config_error_line(&config), config_error_text(&config));
             config_destroy(&config);
             return 1;
         }
         if (cfg.sender) {
             if (cfg.api_key == NULL) {
-                if (config_lookup_string(&config, "api-key", &str1))
-                    cfg.api_key = strdup(str1);
+                if (config_lookup_string(&config, "api-key", &str))
+                    cfg.api_key = strdup(str);
             }
             if (cfg.emocms_url == NULL) {
-                if (config_lookup_string(&config, "emocms-url", &str1))
-                    cfg.emocms_url = strdup(str1);
+                if (config_lookup_string(&config, "emocms-url", &str))
+                    cfg.emocms_url = strdup(str);
                 else {
                     cfg.emocms_url = EMOCMS_URL;
                 }
             }
-            if (cfg.node_id == 0) {
+            if (cfg.node_id == -1) {
                 if (config_lookup_int(&config, "node-id", &tmp))
                     cfg.node_id = tmp;
                 else {
                     cfg.node_id = 1;
                 }
             }
-            if (cfg.datalog == NULL) {
-                if (config_lookup_string(&config, "data-log", &str1))
-                    cfg.datalog = strdup(str1);
+            if (cfg.data_log == NULL) {
+                if (config_lookup_string(&config, "data-log", &str)) {
+                    cfg.data_log = strdup(str);
+                } else if (cfg.data_log_defaults) {
+                    const char *home = get_homedir();
+                    if (cfg.daemonize || home == NULL) {
+                        cfg.data_log = "/var/lib/emonlight/emonlight-data.log";
+                    } else {
+                        cfg.data_log = malloc(strlen(home) + strlen("/emonlight-data.log"));
+                        strcpy(cfg.data_log, home);
+                        strcat(cfg.data_log, "/emonlight-data.log");
+                    }
+                }
             }
+            if (cfg.data_store == NULL) {
+                if (config_lookup_string(&config, "data-store", &str)) {
+                    cfg.data_store = strdup(str);
+                } else {
+                    const char *home = get_homedir();
+                    if (cfg.daemonize || home == NULL) {
+                        cfg.data_store = "/var/lib/emonlight/emonlight-data";
+                    } else {
+                        cfg.data_store = malloc(strlen(home) + strlen("/.emonlight-data"));
+                        strcpy(cfg.data_store, home);
+                        strcat(cfg.data_store, "/.emonlight-data");
+                    }
+                }
+            }
+            if (cfg.ppkwh == 0) {
+                if (config_lookup_int(&config, "pulses-per-kilowatt-hour", &tmp)) {
+                    cfg.ppkwh = tmp;
+                } else {
+                    cfg.ppkwh = 1000;
+                }
+            }
+
         }
         if (cfg.receiver) {
-            if (cfg.pin == 0) {
+            if (cfg.pin == -1) {
                 if (config_lookup_int(&config, "gpio-pin", &tmp))
                     cfg.pin = tmp;
                 else {
@@ -224,11 +295,25 @@ int read_config(const char *config_file) {
             }
         }
         if (cfg.queue_size == 0) {
-            if (config_lookup_int(&config, "queue-size", &tmp))
+            if (config_lookup_int(&config, "queue-size", &tmp)) {
                 cfg.queue_size = tmp;
-            else {
+            } else {
                 cfg.queue_size = 1024;
                 //TODO verification of SO limits
+            }
+        }
+        if (cfg.verbose == -1) {
+            if (config_lookup_int(&config, "verbose", &tmp)) {
+                cfg.verbose = tmp;
+            } else {
+                cfg.verbose = 0;
+            }
+        }
+        if (cfg.pid_path == NULL) {
+            if (config_lookup_string(&config, "pid-path", &str))
+                cfg.pid_path = strdup(str);
+            else {
+                cfg.pid_path = cfg.daemonize ? "/var/run" : "/tmp";
             }
         }
         config_destroy(&config);
@@ -279,7 +364,6 @@ void cleanup_queue(mqd_t mq) {
         L(LOG_INFO, "queue unlinked");
     }
     L(LOG_INFO, "exit, messages in queue %d", attr.mq_curmsgs);
-    closelog();
 }
 
 double time_diff(volatile struct timespec tend, volatile struct timespec tstart) {
@@ -293,11 +377,10 @@ void time_copy(volatile struct timespec *tdest, volatile struct timespec tsource
 }
 
 void sig_handler(int signo) {
+    L(LOG_DEBUG, "received termination request");
     if (cfg.receiver && !cfg.sender) {
-        cleanup_queue(mq);
         exit(0);
     } else {
-        L(LOG_DEBUG, "received termination request");
         stop = 1;
     }
 }
@@ -351,39 +434,39 @@ void remove_entries(int cnt) {
 }
 
 double calc_power(double dt) {
-    return (3600.0 / dt) / PPWH;
+    return (3600000.0 / dt) / cfg.ppkwh;
 }
 
 void process_data() {
     double power = 0, elapsedkWh = 0, dt = -1;
-    struct timespec trec, tout_mq;
+    struct timespec tout_mq;
     ssize_t bytes_read;
     char timestr[31];
 
     CHECK(clock_gettime(CLOCK_REALTIME, &tout_mq) != -1);
     tout_mq.tv_sec += TIMEOUT / 2;
-    bytes_read = mq_timedreceive(mq, (char*) &trec, sizeof (struct timespec), NULL, &tout_mq);
+    bytes_read = mq_timedreceive(mq, (char*) &cfg.tnow, sizeof (struct timespec), NULL, &tout_mq);
     if (bytes_read >= 0) {
-        if (pulseCount == 0) {
-            time_copy(&tstart, trec);
+        if (rawCount == 0) {
+            time_copy(&cfg.tstart, cfg.tnow);
         }
         ++rawCount;
-        dt = time_diff(trec, tlast);
+        dt = time_diff(cfg.tnow, cfg.tlast);
         if (rawCount == 1 || dt > DT_MIN) {
-            ++pulseCount;
+            ++cfg.pulseCount;
             //Calculate power
-            if (pulseCount > 1) {
+            if (cfg.pulseCount > 1 && dt < DT_MAX) {
                 power = calc_power(dt);
                 //Find kwh elapsed
-                elapsedkWh = (1.0 * pulseCount / (PPWH * 1000)); //multiply by 1000 to pulses per wh to kwh convert wh to kwh
-                insert_entry(tlast, trec, dt, power, elapsedkWh, pulseCount);
+                elapsedkWh = 1.0 * cfg.pulseCount / cfg.ppkwh; //multiply by 1000 to pulses per wh to kwh convert wh to kwh
+                insert_entry(cfg.tlast, cfg.tnow, dt, power, elapsedkWh, cfg.pulseCount);
             }
-            time_str(timestr, 31, &trec);
-            L(LOG_DEBUG, "receive %s: DT=%f, P=%ld(%ld), Power=%f, Elapsed kWh=%f", timestr, dt, pulseCount, rawCount, power, elapsedkWh);
-            if (fd_data != NULL)
-                fprintf(fd_data, "%ld,%d,%f,%f,%ld,%ld\n", trec.tv_sec, trec.tv_nsec, power, elapsedkWh, pulseCount, rawCount);
+            time_str(timestr, 31, &cfg.tnow);
+            L(LOG_DEBUG, "receive %s: DT=%f, P=%ld(%ld), Power=%f, Elapsed kWh=%f", timestr, dt, cfg.pulseCount, rawCount, power, elapsedkWh);
+            if (cfg.datalog_file != NULL)
+                fprintf(cfg.datalog_file, "%ld,%d,%f,%f,%ld,%ld\n", cfg.tnow.tv_sec, cfg.tnow.tv_nsec, power, elapsedkWh, cfg.pulseCount, rawCount);
         }
-        time_copy(&tlast, trec);
+        time_copy(&cfg.tlast, cfg.tnow);
     }
 }
 
@@ -443,15 +526,68 @@ int send_data() {
     return res != CURLE_OK;
 }
 
+FILE *open_file(const char *filepath, const char *mode) {
+    FILE *file;
+    if ((file = fopen(filepath, mode)) == NULL) {
+        L(LOG_DEBUG, "error opening file %s: %s", filepath, strerror(errno));
+        exit(-1);
+        //            // separate file name from path
+        //            char *ptr = strrchr(filepath, '/');
+        //            CHECK(ptr != NULL);
+        //            char *filename = ptr++;
+        //            CHECK(strlen(filename) > 0);
+        //            char path[ptr - filepath];
+        //            strncpy(path, filepath, ptr - filepath);
+        //            CHECK(mkpath(path, 00755) == 0);            
+    }
+    return file;
+}
+
+void load_data_store() {
+    if (cfg.data_store != NULL) {
+        FILE *file = open_file(cfg.data_store, "r");
+        fscanf(file, "%ld\n%ld\n%ld\n", &cfg.pulseCount, &cfg.tlast.tv_sec, &cfg.tlast.tv_nsec);
+        fclose(file);
+        struct tm t;
+        char strd[20];
+        strftime(strd, sizeof (strd), "%F %T", localtime_r(&cfg.tlast.tv_sec, &t));
+        L(LOG_DEBUG, "read last_time=%s, pulse count=%ld from %s", strd, cfg.pulseCount, cfg.data_store);
+    }
+}
+
+void save_data_store() {
+    if (cfg.data_store != NULL) {
+        FILE *file = open_file(cfg.data_store, "w");
+        fprintf(file, "%ld\n%ld\n%ld\n", cfg.pulseCount, cfg.tnow.tv_sec, cfg.tnow.tv_nsec);
+        fclose(file);
+        struct tm t;
+        char strd[20];
+        strftime(strd, sizeof (strd), "%F %T", localtime_r(&cfg.tnow.tv_sec, &t));
+        L(LOG_DEBUG, "write last_time=%s, pulse count=%ld to %s", strd, cfg.pulseCount, cfg.data_store);
+    }
+}
+
+void open_data_log() {
+    if (cfg.data_log != NULL) {
+        cfg.datalog_file = open_file(cfg.data_log, "a+");
+        L(LOG_DEBUG, "log data to %s", cfg.data_log);
+    }
+}
+
+void close_data_log() {
+    if (cfg.datalog_file != NULL) {
+        fclose(cfg.datalog_file);
+        L(LOG_DEBUG, "close log file %s", cfg.data_log);
+    }
+}
+
 void run_as_sender() {
     L(LOG_DEBUG, "running as sender");
 
     TAILQ_INIT(&send_q);
+    open_data_log();
+    load_data_store();
     curl = curl_easy_init();
-    if (cfg.datalog != NULL) {
-        fd_data = fopen(cfg.datalog, "a+");
-        L(LOG_DEBUG, "log data to %s", cfg.datalog);
-    }
 
     do {
         struct timespec tout, tnow;
@@ -471,13 +607,6 @@ void run_as_sender() {
             }
         }
     } while (!stop);
-
-    cleanup_queue(mq);
-    curl_easy_cleanup(curl);
-    if (fd_data != NULL) {
-        fclose(fd_data);
-        fd_data = NULL;
-    }
 }
 
 void run_as_receiver() {
@@ -493,14 +622,14 @@ void run_as_receiver() {
 
     if (wiringPiSetupSys() < 0) {
         L(LOG_WARNING, "Unable to setup wiringPi: %s", strerror(errno));
-        exit(1);
+        exit(-3);
     }
 
     // set Pin 17/0 generate an interrupt on high-to-low transitions
     // and attach myInterrupt() to the interrupt
     if (wiringPiISR(cfg.pin, INT_EDGE_FALLING, &pulse_interrupt) < 0) {
         L(LOG_WARNING, "Unable to setup ISR: %s", strerror(errno));
-        exit(1);
+        exit(-4);
     }
 
     if (!cfg.sender) {
@@ -510,11 +639,75 @@ void run_as_receiver() {
     }
 }
 
+const char *log_name() {
+    return (cfg.receiver && cfg.sender) ? "emonlight" : (cfg.receiver ? "emonlight-rec" : "emonlight-send");
+}
+
+int pidfile(char *str) {
+    return sprintf(str, "%s/%s.pid", cfg.pid_path, log_name());
+}
+
+void daemonize() {
+    char str[200];
+    pidfile(str);
+
+    /* Ensure only one copy */
+    pidFilehandle = open(str, O_RDWR | O_CREAT, 0644);
+
+    if (pidFilehandle == -1) {
+        /* Couldn't open lock file */
+        L(LOG_WARNING, "Could not open PID lock file %s, exiting", str);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Try to lock file */
+    if (lockf(pidFilehandle, F_TLOCK, 0) == -1) {
+        /* Couldn't get lock on lock file */
+        L(LOG_WARNING, "Could not lock PID lock file %s, exiting", str);
+        exit(EXIT_FAILURE);
+    }
+
+    if (daemon(0, 0) == -1) {
+        L(LOG_WARNING, "Cannot daemonize");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Get and format PID */
+    sprintf(str, "%d\n", getpid());
+    /* write pid to lockfile */
+    write(pidFilehandle, str, strlen(str));
+
+    L(LOG_DEBUG, "daemonized");
+}
+
+void at_exit(void) {
+    // close and remove pidfile in case of daemon
+    if (pidFilehandle != -1) {
+        close(pidFilehandle);
+        char str[200];
+        pidfile(str);
+        remove(str);
+    }
+    if (mq != -1)
+        cleanup_queue(mq);
+    if (curl != NULL)
+        curl_easy_cleanup(curl);
+
+    if (cfg.sender) {
+        save_data_store();
+        close_data_log();
+    }
+
+    L(LOG_DEBUG, "terminated");
+    closelog();
+}
+
 // -------------------------------------------------------------------------
 // main
 
 int main(int argc, char **argv) {
 
+    atexit(at_exit);
     CHECK(signal(SIGINT, sig_handler) != SIG_ERR);
     CHECK(signal(SIGTERM, sig_handler) != SIG_ERR);
     CHECK(signal(SIGCHLD, SIG_IGN) != SIG_ERR);
@@ -527,12 +720,13 @@ int main(int argc, char **argv) {
 
     if (!cfg.verbose)
         LOG_UPTO(LOG_WARNING);
-    openlog(cfg.receiver && cfg.sender ? "emonlight" : cfg.receiver ? "emonlight-rec" : "emonlight-send", LOG_PID | LOG_CONS, LOG_USER);
+    openlog(log_name(), LOG_PID | LOG_CONS, LOG_USER);
 
-    if (cfg.daemonize) {
-        CHECK(daemon(0, 0) == 0);
-        L(LOG_DEBUG, "daemonized");
-    }
+    if (cfg.daemonize)
+        daemonize();
+
+    if (cfg.config != NULL)
+        L(LOG_INFO, "read config from %s", cfg.config);
 
     int oflag = cfg.receiver && !cfg.sender ? O_WRONLY : !cfg.receiver && cfg.sender ? O_RDONLY : O_RDWR;
     mq = open_pulse_queue(oflag | O_CREAT);
@@ -543,5 +737,6 @@ int main(int argc, char **argv) {
     if (cfg.sender) {
         run_as_sender();
     }
+
     return 0;
 }
