@@ -16,6 +16,8 @@
                    displayName="Source Files"
                    projectFiles="true">
       <itemPath>main.c</itemPath>
+      <itemPath>receiver.c</itemPath>
+      <itemPath>sender.c</itemPath>
     </logicalFolder>
     <logicalFolder name="TestFiles"
                    displayName="Test Files"
@@ -44,6 +46,17 @@
         <rebuildPropChanged>false</rebuildPropChanged>
       </toolsSet>
       <compileType>
+        <cTool>
+          <incDir>
+            <pElem>.</pElem>
+          </incDir>
+          <warningLevel>2</warningLevel>
+        </cTool>
+        <ccTool>
+          <incDir>
+            <pElem>.</pElem>
+          </incDir>
+        </ccTool>
         <linkerTool>
           <commandLine>-lrt -lcurl -lwiringPi -lconfig</commandLine>
         </linkerTool>
@@ -61,23 +74,19 @@
           </linkerLibItems>
         </linkerTool>
       </folder>
-      <folder path="TestFiles/f2">
-        <linkerTool>
-          <output>${TESTDIR}/TestFiles/f2</output>
-          <linkerLibItems>
-            <linkerOptionItem>-lcunit</linkerOptionItem>
-          </linkerLibItems>
-        </linkerTool>
-      </folder>
       <item path="main.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="main.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="receiver.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="scripts/config" ex="false" tool="3" flavor2="0">
       </item>
       <item path="scripts/emonlight_init.sh" ex="false" tool="3" flavor2="0">
       </item>
       <item path="scripts/emonlight_start.sh" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="sender.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="tests/cunittest.c" ex="false" tool="0" flavor2="0">
       </item>
@@ -95,9 +104,15 @@
       <compileType>
         <cTool>
           <developmentMode>5</developmentMode>
+          <incDir>
+            <pElem>.</pElem>
+          </incDir>
         </cTool>
         <ccTool>
           <developmentMode>5</developmentMode>
+          <incDir>
+            <pElem>.</pElem>
+          </incDir>
         </ccTool>
         <fortranCompilerTool>
           <developmentMode>5</developmentMode>
@@ -105,6 +120,12 @@
         <asmTool>
           <developmentMode>5</developmentMode>
         </asmTool>
+        <linkerTool>
+          <output>${TESTDIR}/TestFiles/f2</output>
+          <linkerLibItems>
+            <linkerOptionItem>-lcunit</linkerOptionItem>
+          </linkerLibItems>
+        </linkerTool>
       </compileType>
       <folder path="TestFiles/f1">
         <linkerTool>
@@ -114,23 +135,19 @@
           </linkerLibItems>
         </linkerTool>
       </folder>
-      <folder path="TestFiles/f2">
-        <linkerTool>
-          <output>${TESTDIR}/TestFiles/f2</output>
-          <linkerLibItems>
-            <linkerOptionItem>-lcunit</linkerOptionItem>
-          </linkerLibItems>
-        </linkerTool>
-      </folder>
       <item path="main.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="main.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="receiver.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="scripts/config" ex="false" tool="3" flavor2="0">
       </item>
       <item path="scripts/emonlight_init.sh" ex="false" tool="3" flavor2="0">
       </item>
       <item path="scripts/emonlight_start.sh" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="sender.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="tests/cunittest.c" ex="false" tool="0" flavor2="0">
       </item>

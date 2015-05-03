@@ -7,5 +7,4 @@
 #
 
 msg_max=$(cat /proc/sys/fs/mqueue/msg_max)
-emonlight -r -v -d -q $msg_max
-emonlight -s -v -d -q $msg_max
+emonlight -v -q $msg_max

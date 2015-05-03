@@ -8,3 +8,13 @@ if [ $MSG_MAX -lt 2048 ]; then
 fi
 MSG_MAX=$(cat /proc/sys/fs/mqueue/msg_max)
 DEFAULT_ARGS="-q $MSG_MAX --data-log"
+
+# configure input pin for reading pulse signal
+gpio -g mode 17 in
+gpio -g mode 17 up
+gpio edge 17 falling
+# configure output pin for buzzer control 
+gpio -g mode 3 out
+gpio export 3 out
+gpio -g write 3 0
+#gpio exports

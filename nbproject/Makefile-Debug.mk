@@ -35,7 +35,9 @@ OBJECTDIR=${CND_BUILDDIR}/${CND_CONF}/${CND_PLATFORM}
 
 # Object Files
 OBJECTFILES= \
-	${OBJECTDIR}/main.o
+	${OBJECTDIR}/main.o \
+	${OBJECTDIR}/receiver.o \
+	${OBJECTDIR}/sender.o
 
 # Test Directory
 TESTDIR=${CND_BUILDDIR}/${CND_CONF}/${CND_PLATFORM}/tests
@@ -71,7 +73,17 @@ ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/emonlight: ${OBJECTFILES}
 ${OBJECTDIR}/main.o: main.c 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
-	$(COMPILE.c) -g -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main.o main.c
+	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main.o main.c
+
+${OBJECTDIR}/receiver.o: receiver.c 
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/receiver.o receiver.c
+
+${OBJECTDIR}/sender.o: sender.c 
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/sender.o sender.c
 
 # Subprojects
 .build-subprojects:
@@ -86,7 +98,7 @@ ${TESTDIR}/TestFiles/f1: ${TESTDIR}/tests/cunittest.o ${OBJECTFILES:%.o=%_nomain
 ${TESTDIR}/tests/cunittest.o: tests/cunittest.c 
 	${MKDIR} -p ${TESTDIR}/tests
 	${RM} "$@.d"
-	$(COMPILE.c) -g -MMD -MP -MF "$@.d" -o ${TESTDIR}/tests/cunittest.o tests/cunittest.c
+	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${TESTDIR}/tests/cunittest.o tests/cunittest.c
 
 
 ${OBJECTDIR}/main_nomain.o: ${OBJECTDIR}/main.o main.c 
@@ -97,9 +109,35 @@ ${OBJECTDIR}/main_nomain.o: ${OBJECTDIR}/main.o main.c
 	   (echo "$$NMOUTPUT" | ${GREP} 'T _main$$'); \
 	then  \
 	    ${RM} "$@.d";\
-	    $(COMPILE.c) -g -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main_nomain.o main.c;\
+	    $(COMPILE.c) -g -Wall -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main_nomain.o main.c;\
 	else  \
 	    ${CP} ${OBJECTDIR}/main.o ${OBJECTDIR}/main_nomain.o;\
+	fi
+
+${OBJECTDIR}/receiver_nomain.o: ${OBJECTDIR}/receiver.o receiver.c 
+	${MKDIR} -p ${OBJECTDIR}
+	@NMOUTPUT=`${NM} ${OBJECTDIR}/receiver.o`; \
+	if (echo "$$NMOUTPUT" | ${GREP} '|main$$') || \
+	   (echo "$$NMOUTPUT" | ${GREP} 'T main$$') || \
+	   (echo "$$NMOUTPUT" | ${GREP} 'T _main$$'); \
+	then  \
+	    ${RM} "$@.d";\
+	    $(COMPILE.c) -g -Wall -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/receiver_nomain.o receiver.c;\
+	else  \
+	    ${CP} ${OBJECTDIR}/receiver.o ${OBJECTDIR}/receiver_nomain.o;\
+	fi
+
+${OBJECTDIR}/sender_nomain.o: ${OBJECTDIR}/sender.o sender.c 
+	${MKDIR} -p ${OBJECTDIR}
+	@NMOUTPUT=`${NM} ${OBJECTDIR}/sender.o`; \
+	if (echo "$$NMOUTPUT" | ${GREP} '|main$$') || \
+	   (echo "$$NMOUTPUT" | ${GREP} 'T main$$') || \
+	   (echo "$$NMOUTPUT" | ${GREP} 'T _main$$'); \
+	then  \
+	    ${RM} "$@.d";\
+	    $(COMPILE.c) -g -Wall -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/sender_nomain.o sender.c;\
+	else  \
+	    ${CP} ${OBJECTDIR}/sender.o ${OBJECTDIR}/sender_nomain.o;\
 	fi
 
 # Run Test Targets

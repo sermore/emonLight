@@ -20,7 +20,7 @@ PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin
 DESC="emonlight daemon"
 NAME=emonlight
 DAEMON=/usr/local/bin/$NAME
-DAEMON_ARGS="-r -s -d"
+DAEMON_ARGS="-d"
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
 

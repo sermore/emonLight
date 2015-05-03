@@ -14,7 +14,7 @@
 
 #include "../main.h"
 
-extern struct cfg_t cfg;
+//extern struct cfg_t cfg;
 
 extern struct send_queue send_q;
 extern int send_queue_length;
@@ -25,6 +25,8 @@ extern int send_queue_length;
 //extern long pulseCount, rawCount;
 //extern struct timespec tstart, tlast;
 extern char send_buf[1024];
+extern double soft_power_acc;
+extern double hard_power_acc;
 
 extern int build_url();
 extern double calc_power(double dt);
@@ -33,7 +35,8 @@ extern mqd_t open_pulse_queue(int oflag);
 extern void parse_opts(int argc, char **argv);
 extern void cleanup_queue(mqd_t mq);
 extern char* get_config_file(const char *config_file);
-
+extern int read_config(const char *config_file);
+extern int calc_buzzer_pulses(double power, double elapsedkWh);
 /*
  * CUnit Test Suite
  */
@@ -49,7 +52,7 @@ int clean_suite(void) {
 int init_config(char * config) {
     bzero(&cfg, sizeof (cfg));
     cfg.verbose = -1;
-    cfg.pin = -1;
+    cfg.pulse_pin = -1;
     cfg.node_id = -1;
     cfg.sender = 1;
     cfg.receiver = 1;
@@ -72,13 +75,13 @@ void testPARSE_OPTS(void) {
     parse_opts(6, argv);
     CU_ASSERT(cfg.queue_size == 1005);
     CU_ASSERT(cfg.verbose == 1);
-    CU_ASSERT(cfg.pin == 32);
+    CU_ASSERT(cfg.pulse_pin == 32);
 }
 
 void testREAD_CONFIG(void) {
     bzero(&cfg, sizeof (cfg));
     CU_ASSERT_PTR_NULL(cfg.config);
-    CU_ASSERT_EQUAL(cfg.pin, 0);
+    CU_ASSERT_EQUAL(cfg.pulse_pin, 0);
     CU_ASSERT_EQUAL(cfg.queue_size, 0);
     CU_ASSERT_FALSE(access("tests/emonlight1.conf", F_OK));
     CU_ASSERT_EQUAL(init_config("tests/emonlight1.conf"), 1);
@@ -87,7 +90,7 @@ void testREAD_CONFIG(void) {
     CU_ASSERT_STRING_EQUAL(cfg.api_key, "1234567890KK");
     CU_ASSERT_STRING_EQUAL(cfg.emocms_url, "http://xx.yy.zz");
     //    printf("P=%d, Q=%d\n", cfg.pin, cfg.queue_size);
-    CU_ASSERT_EQUAL(cfg.pin, 12);
+    CU_ASSERT_EQUAL(cfg.pulse_pin, 12);
     CU_ASSERT_EQUAL(cfg.queue_size, 345);
     CU_ASSERT_EQUAL(cfg.node_id, 56);
 }
@@ -95,6 +98,8 @@ void testREAD_CONFIG(void) {
 void testINSERT_ENTRY(void) {
     send_queue_length = 0;
     TAILQ_INIT(&send_q);
+    printf("S=%d\n", sizeof(struct send_entry));
+    CU_ASSERT_EQUAL(sizeof(struct send_entry), 56);
     CU_ASSERT_PTR_NULL(TAILQ_FIRST(&send_q));
     struct timespec t0 = {1234567890, 123456789};
     struct timespec t1 = {1234567900, 123456789};
@@ -174,6 +179,30 @@ void testBUILD_URL(void) {
     CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1],[10,56,3600.000000,0.004000,2],[11,56,1200.000000,0.005000,3],[13,56,1200.000000,0.005000,3],[14,56,7200.000000,0.006000,4],[14,56,9000.000000,0.007000,5]]&time=1234567891");
 }
 
+void testCALC_BUZZER_PULSES(void) {
+    soft_power_acc = 0;
+    hard_power_acc = 0;
+    CU_ASSERT_EQUAL(cfg.power_soft_threshold, 3300);
+    CU_ASSERT_EQUAL(cfg.power_hard_threshold, 4000);
+    CU_ASSERT_EQUAL(cfg.power_hard_threshold_time, 240);
+    int hs_limit = 1;
+    double max_p_kwh = 1.0 * (hs_limit ? cfg.power_hard_threshold * cfg.power_hard_threshold_time : cfg.power_soft_threshold * cfg.power_soft_threshold_time) / 3600000;
+    CU_ASSERT_DOUBLE_EQUAL(max_p_kwh, 0.2667, 0.01);
+    hs_limit = 0;
+    max_p_kwh = 1.0 * (hs_limit ? cfg.power_hard_threshold * cfg.power_hard_threshold_time : cfg.power_soft_threshold * cfg.power_soft_threshold_time) / 3600000;
+    CU_ASSERT_DOUBLE_EQUAL(max_p_kwh, 9.9, 0.01);
+    CU_ASSERT_EQUAL(calc_buzzer_pulses(3300, 0), 1);
+    CU_ASSERT_EQUAL(calc_buzzer_pulses(3800, 0), 1);
+    CU_ASSERT_EQUAL(calc_buzzer_pulses(4000, 0), 4);
+    printf("P=%d\n", calc_buzzer_pulses(3300, 4.001/3));
+    CU_ASSERT_EQUAL(calc_buzzer_pulses(3300, 4.001/3), 2);
+    CU_ASSERT_EQUAL(calc_buzzer_pulses(3800, 8.001/3), 3);
+    CU_ASSERT_EQUAL(calc_buzzer_pulses(3900, 4), 4);
+    CU_ASSERT_EQUAL(calc_buzzer_pulses(4100, 0), 4);
+    CU_ASSERT_EQUAL(calc_buzzer_pulses(4100, 0.1), 5);
+    CU_ASSERT_EQUAL(calc_buzzer_pulses(4100, 0.2), 6);
+}
+
 int main() {
     CU_pSuite pSuite = NULL;
 
@@ -195,6 +224,7 @@ int main() {
             || (NULL == CU_add_test(pSuite, "testREAD_CONFIG", testREAD_CONFIG))
             || (NULL == CU_add_test(pSuite, "testINSERT_ENTRY", testINSERT_ENTRY))
             || (NULL == CU_add_test(pSuite, "testBUILD_URL", testBUILD_URL))
+            || (NULL == CU_add_test(pSuite, "testCALC_BUZZER_PULSES", testCALC_BUZZER_PULSES))
             ) {
         CU_cleanup_registry();
         return CU_get_error();
