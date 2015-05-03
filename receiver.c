@@ -241,7 +241,7 @@ void receiver_run() {
 }
 
 void receiver_sig_handler(int signo) {
-    exit(0);
+    exit(EXIT_SUCCESS);
 }
 
 void receiver_at_exit() {

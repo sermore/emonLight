@@ -36,6 +36,7 @@
       <itemPath>Makefile</itemPath>
     </logicalFolder>
     <itemPath>scripts/config</itemPath>
+    <itemPath>scripts/emonlight.conf.example</itemPath>
   </logicalFolder>
   <projectmakefile>Makefile</projectmakefile>
   <confs>
@@ -81,6 +82,8 @@
       <item path="receiver.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="scripts/config" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="scripts/emonlight.conf.example" ex="false" tool="3" flavor2="0">
       </item>
       <item path="scripts/emonlight_init.sh" ex="false" tool="3" flavor2="0">
       </item>
@@ -142,6 +145,8 @@
       <item path="receiver.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="scripts/config" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="scripts/emonlight.conf.example" ex="false" tool="3" flavor2="0">
       </item>
       <item path="scripts/emonlight_init.sh" ex="false" tool="3" flavor2="0">
       </item>

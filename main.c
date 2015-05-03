@@ -14,10 +14,10 @@
 struct cfg_t cfg = {
     .config = NULL,
     .emocms_url = NULL,
-    .daemonize = 0,
+    .daemonize = -1,
     .receiver = 0,
     .sender = 0,
-    .unlink_queue = 0,
+    .unlink_queue = -1,
     .queue_size = 0,
     .verbose = -1,
     .pulse_pin = -1,
@@ -235,6 +235,35 @@ int read_config(const char *config_file) {
             config_destroy(&config);
             return 1;
         }
+        if (cfg.daemonize == -1) {
+            if (config_lookup_bool(&config, "daemonize", &tmp)) {
+                cfg.daemonize = tmp;
+            } else {
+                cfg.daemonize = 0;
+            }
+        }
+        if (cfg.queue_size == 0) {
+            if (config_lookup_int(&config, "queue-size", &tmp)) {
+                cfg.queue_size = tmp;
+            } else {
+                cfg.queue_size = 1024;
+                //TODO verification of SO limits
+            }
+        }
+        if (cfg.verbose == -1) {
+            if (config_lookup_bool(&config, "verbose", &tmp)) {
+                cfg.verbose = tmp;
+            } else {
+                cfg.verbose = 0;
+            }
+        }
+        if (cfg.pid_path == NULL) {
+            if (config_lookup_string(&config, "pid-path", &str))
+                cfg.pid_path = strdup(str);
+            else {
+                cfg.pid_path = cfg.daemonize ? "/var/run" : "/tmp";
+            }
+        }
         if (cfg.sender) {
             if (cfg.api_key == NULL) {
                 if (config_lookup_string(&config, "api-key", &str))
@@ -266,9 +295,13 @@ int read_config(const char *config_file) {
             if (cfg.buzzer_pin == -1) {
                 if (config_lookup_int(&config, "buzzer-pin", &tmp)) {
                     cfg.buzzer_pin = tmp;
+                }
+            }
+            if (cfg.unlink_queue == -1) {
+                if (config_lookup_bool(&config, "unlink-queue", &tmp)) {
+                    cfg.unlink_queue = tmp;
                 } else {
-                    // FIXME
-                    cfg.buzzer_pin = 3;
+                    cfg.unlink_queue = 0;
                 }
             }
             if (cfg.data_log == NULL) {
@@ -347,28 +380,6 @@ int read_config(const char *config_file) {
                 } else {
                     cfg.power_hard_limit = 267;
                 }
-            }
-        }
-        if (cfg.queue_size == 0) {
-            if (config_lookup_int(&config, "queue-size", &tmp)) {
-                cfg.queue_size = tmp;
-            } else {
-                cfg.queue_size = 1024;
-                //TODO verification of SO limits
-            }
-        }
-        if (cfg.verbose == -1) {
-            if (config_lookup_int(&config, "verbose", &tmp)) {
-                cfg.verbose = tmp;
-            } else {
-                cfg.verbose = 0;
-            }
-        }
-        if (cfg.pid_path == NULL) {
-            if (config_lookup_string(&config, "pid-path", &str))
-                cfg.pid_path = strdup(str);
-            else {
-                cfg.pid_path = cfg.daemonize ? "/var/run" : "/tmp";
             }
         }
         config_destroy(&config);

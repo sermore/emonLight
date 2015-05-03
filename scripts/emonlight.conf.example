@@ -1,0 +1,38 @@
+
+# WARNING this program can drive gpio pins only after pin configuration is made by running gpio 
+# gpio pin for pulse signal reading
+pulse-pin = 17
+# gpio pin to drive buzzer
+buzzer-pin = 3
+# set queue size; probably the queue size limit must be changed from here /proc/sys/fs/mqueue/msg_max
+queue-size = 1024
+# enable verbose mode
+verbose = true
+# remove queue at program termination if queue is empty
+unlink-queue = true
+# number of pulses equivalent to 1 kWh
+pulses-per-kilowatt-hour = 1000
+
+# power thresholds
+power-soft-threshold = 3300
+# 3 hours
+power-soft-threshold-time = 10800 
+# Watt/h cap limit for above time interval, when power is between soft and hard thresholds 
+power-soft-limit = 4000
+power-hard-threshold = 4000
+# 4 minutes
+power-hard-threshold-time = 240 
+# Watt/h cap limit for above time interval, when power is above hard threshold
+power-hard-limit = 267
+
+# url to access emoncms site
+emocms-url = "http://emoncms.org";
+# api-key for emoncms.org
+api-key = "XXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+# node id for emoncms.org
+node-id = 1
+
+# if a data-log configuration is found then all data received is saved to this file
+data-log = "/var/lib/emonlight/emonlight-data.log"
+# store of status persistent information: time and count for last pulse received
+data-store = "/var/lib/emonlight/emonlight-data"
