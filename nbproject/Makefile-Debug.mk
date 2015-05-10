@@ -70,17 +70,17 @@ ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/emonlight: ${OBJECTFILES}
 	${MKDIR} -p ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}
 	${LINK.c} -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/emonlight ${OBJECTFILES} ${LDLIBSOPTIONS} -lrt -lcurl -lwiringPi -lconfig
 
-${OBJECTDIR}/main.o: main.c 
+${OBJECTDIR}/main.o: nbproject/Makefile-${CND_CONF}.mk main.c 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
 	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main.o main.c
 
-${OBJECTDIR}/receiver.o: receiver.c 
+${OBJECTDIR}/receiver.o: nbproject/Makefile-${CND_CONF}.mk receiver.c 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
 	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/receiver.o receiver.c
 
-${OBJECTDIR}/sender.o: sender.c 
+${OBJECTDIR}/sender.o: nbproject/Makefile-${CND_CONF}.mk sender.c 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
 	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/sender.o sender.c

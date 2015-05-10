@@ -59,6 +59,7 @@ struct send_entry {
     double power;
     double elapsedkWh;
     long pulseCount;
+    long rawCount;
 };
 
 TAILQ_HEAD(send_queue, send_entry);
@@ -94,19 +95,21 @@ struct cfg_t {
 
 extern struct cfg_t cfg;
 extern mqd_t mq;
+extern volatile int stop;
+
 extern FILE* open_file(const char *filepath, const char *mode);
-extern struct send_entry* populate_entry(struct send_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount);
+extern struct send_entry* populate_entry(struct send_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount);
 extern void time_copy(struct timespec *tdest, struct timespec tsource);
 extern double time_diff(struct timespec tend, struct timespec tstart);
 extern int time_str(char *buf, uint len, struct timespec * ts);
 
 extern void receiver_at_exit();
-extern void receiver_run();
-extern void receiver_sig_handler(int signo);
+extern void receiver_init();
+extern void receiver_loop();
 
 extern void sender_at_exit();
-extern void sender_run();
-extern void sender_sig_handler(int signo);
+extern void sender_init();
+extern void sender_loop();
 
 #ifdef	__cplusplus
 }

@@ -1,12 +1,11 @@
 
-#include <wiringPi.h>
 #include "main.h"
+#include <wiringPi.h>
 
 #define CLOCKID CLOCK_REALTIME
 #define SIG_UP SIGRTMIN
 #define SIG_DOWN (SIGRTMIN+1)
 
-FILE *datalog_file = NULL;
 volatile long rawCount = 0;
 struct timespec tlast = {0L, 0L};
 struct timespec tnow = {0L, 0L};
@@ -84,7 +83,7 @@ int calc_buzzer_pulses(double power, double elapsedkWh) {
     double dp_kwh = elapsedkWh - (hs_limit ? hard_power_acc : soft_power_acc);
     double max_p_kwh = 1.0 * (hs_limit ? cfg.power_hard_limit : cfg.power_soft_limit) / 1000;
     int buzzer_pulses = (hs_limit ? 4 : 1) + 3.0 * (dp_kwh / max_p_kwh);
-    L(LOG_DEBUG, "power usage warning %d, hard=%d, dp=%f, %%%f", buzzer_pulses, hs_limit, dp_kwh, 100 * dp_kwh/max_p_kwh);
+    L(LOG_DEBUG, "power usage warning %d, hard=%d, dp=%f, %%%f", buzzer_pulses, hs_limit, dp_kwh, 100 * dp_kwh / max_p_kwh);
     return buzzer_pulses;
 }
 
@@ -150,10 +149,7 @@ static void pulse_interrupt(void) {
             power = calc_power(dt);
             // calculate kwh elapsed
             elapsedkWh = 1.0 * pulseCount / cfg.ppkwh; //multiply by 1000 to pulses per wh to kwh convert wh to kwh
-            populate_entry(&entry, tlast, tnow, dt, power, elapsedkWh, pulseCount);
-            if (datalog_file != NULL) {
-                fprintf(datalog_file, "%ld,%ld,%f,%f,%ld,%ld\n", tnow.tv_sec, tnow.tv_nsec, power, elapsedkWh, pulseCount, rawCount);
-            }
+            populate_entry(&entry, tlast, tnow, dt, power, elapsedkWh, pulseCount, rawCount);
             buzzer_control(power, elapsedkWh);
             CHECK(0 <= mq_send(mq, (char*) &entry, sizeof (struct send_entry), 0));
         }
@@ -187,21 +183,7 @@ static void data_store_save() {
     }
 }
 
-static void data_log_open() {
-    if (cfg.data_log != NULL) {
-        datalog_file = open_file(cfg.data_log, "a+");
-        L(LOG_DEBUG, "log data to %s", cfg.data_log);
-    }
-}
-
-static void data_log_close() {
-    if (datalog_file != NULL) {
-        fclose(datalog_file);
-        L(LOG_DEBUG, "close log file %s", cfg.data_log);
-    }
-}
-
-void receiver_run() {
+void receiver_init() {
     L(LOG_DEBUG, "running as receiver");
 
     // sets up the wiringPi library
@@ -229,25 +211,19 @@ void receiver_run() {
         L(LOG_WARNING, "Unable to setup ISR: %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
-
-    data_log_open();
+    
     data_store_load();
-
-    if (!cfg.sender) {
-        do {
-            sleep(1000);
-        } while (1);
-    }
-}
-
-void receiver_sig_handler(int signo) {
-    exit(EXIT_SUCCESS);
 }
 
 void receiver_at_exit() {
     data_store_save();
-    data_log_close();
     if (cfg.buzzer_pin != -1) {
         digitalWrite(cfg.buzzer_pin, 0);
+    }
+}
+
+void receiver_loop() {
+    if (!cfg.sender) {
+        sleep(TIMEOUT);
     }
 }

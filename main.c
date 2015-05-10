@@ -4,10 +4,10 @@
  *
  * Created on April 12, 2015, 10:21 AM
  */
+#include "main.h"
 #include <getopt.h>
 #include <pwd.h>
 #include <sys/types.h>
-#include "main.h"
 
 #define YN(v) (v == 1 ? "YES" : "NO")
 
@@ -36,6 +36,8 @@ struct cfg_t cfg = {
 
 mqd_t mq = -1;
 int pidFilehandle = -1;
+volatile int stop;
+
 
 static void optarg_to_int(int *conf, char *option) {
     char *endptr;
@@ -205,7 +207,7 @@ static const char *get_homedir() {
 const char* get_config_file(const char *config_file) {
     const char *dest_file;
     if (config_file == NULL) {
-        if (cfg.daemonize) {
+        if (cfg.daemonize == 1) {
             dest_file = "/etc/emonlight.conf";
         } else {
             char buf[2048];
@@ -283,6 +285,20 @@ int read_config(const char *config_file) {
                     cfg.node_id = 1;
                 }
             }
+            if (cfg.data_log == NULL) {
+                if (config_lookup_string(&config, "data-log", &str)) {
+                    cfg.data_log = strdup(str);
+                } else if (cfg.data_log_defaults) {
+                    const char *home = get_homedir();
+                    if (cfg.daemonize || home == NULL) {
+                        cfg.data_log = "/var/lib/emonlight/emonlight-data.log";
+                    } else {
+                        cfg.data_log = malloc(strlen(home) + strlen("/emonlight-data.log"));
+                        strcpy(cfg.data_log, home);
+                        strcat(cfg.data_log, "/emonlight-data.log");
+                    }
+                }
+            }            
         }
         if (cfg.receiver) {
             if (cfg.pulse_pin == -1) {
@@ -302,20 +318,6 @@ int read_config(const char *config_file) {
                     cfg.unlink_queue = tmp;
                 } else {
                     cfg.unlink_queue = 0;
-                }
-            }
-            if (cfg.data_log == NULL) {
-                if (config_lookup_string(&config, "data-log", &str)) {
-                    cfg.data_log = strdup(str);
-                } else if (cfg.data_log_defaults) {
-                    const char *home = get_homedir();
-                    if (cfg.daemonize || home == NULL) {
-                        cfg.data_log = "/var/lib/emonlight/emonlight-data.log";
-                    } else {
-                        cfg.data_log = malloc(strlen(home) + strlen("/emonlight-data.log"));
-                        strcpy(cfg.data_log, home);
-                        strcat(cfg.data_log, "/emonlight-data.log");
-                    }
                 }
             }
             if (cfg.data_store == NULL) {
@@ -510,13 +512,14 @@ int time_str(char *buf, uint len, struct timespec * ts) {
     return 0;
 }
 
-struct send_entry* populate_entry(struct send_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount) {
+struct send_entry* populate_entry(struct send_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount) {
     time_copy(&entry->tlast, tlast);
     time_copy(&entry->trec, trec);
     entry->dt = dt;
     entry->power = power;
     entry->elapsedkWh = elapsedkWh;
     entry->pulseCount = pulseCount;
+    entry->rawCount = rawCount;
     entry->entries.tqe_next = NULL;
     entry->entries.tqe_prev = NULL;
     return entry;
@@ -524,10 +527,7 @@ struct send_entry* populate_entry(struct send_entry *entry, struct timespec tlas
 
 static void sig_handler(int signo) {
     L(LOG_DEBUG, "received termination request");
-    if (cfg.receiver)
-        receiver_sig_handler(signo);
-    if (cfg.sender)
-        sender_sig_handler(signo);
+    stop = 1;
 }
 
 FILE *open_file(const char *filepath, const char *mode) {
@@ -650,11 +650,18 @@ int main(int argc, char **argv) {
     mq = queue_open(oflag | O_CREAT);
 
     if (cfg.receiver) {
-        receiver_run();
+        receiver_init();
     }
     if (cfg.sender) {
-        sender_run();
+        sender_init();
     }
 
+    // main loop
+    stop = 0;
+    do {
+        receiver_loop();
+        sender_loop();
+    } while (!stop);
+    
     return 0;
 }

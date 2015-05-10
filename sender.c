@@ -1,19 +1,20 @@
 
-#include <curl/curl.h>
 #include "main.h"
+#include <curl/curl.h>
 
 struct send_queue send_q;
 int send_queue_length = 0;
 CURL *curl = NULL;
-
-volatile int stop = 0;
 char send_buf[1024];
+FILE *data_log_file = NULL;
+
 
 // TODO switch to SIMPLEQ
 
-struct send_entry * insert_entry(struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount) {
+//FIXME used only in test
+struct send_entry * insert_entry(struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount) {
     struct send_entry *entry = malloc(sizeof (struct send_entry));
-    populate_entry(entry, tlast, trec, dt, power, elapsedkWh, pulseCount);
+    populate_entry(entry, tlast, trec, dt, power, elapsedkWh, pulseCount, rawCount);
     TAILQ_INSERT_TAIL(&send_q, entry, entries);
     send_queue_length++;
     return entry;
@@ -31,6 +32,26 @@ void remove_entries(int cnt) {
     CHECK(send_queue_length >= 0);
 }
 
+static void data_log_open() {
+    if (cfg.data_log != NULL) {
+        data_log_file = open_file(cfg.data_log, "a+");
+        L(LOG_DEBUG, "log data to %s", cfg.data_log);
+    }
+}
+
+static void data_log_write(struct send_entry *p) {
+    if (data_log_file != NULL) {
+        fprintf(data_log_file, "%ld,%ld,%f,%f,%ld,%ld\n", p->trec.tv_sec, p->trec.tv_nsec, p->power, p->elapsedkWh, p->pulseCount, p->rawCount);
+    }
+}
+
+static void data_log_close() {
+    if (data_log_file != NULL) {
+        fclose(data_log_file);
+        L(LOG_DEBUG, "close log file %s", cfg.data_log);
+    }
+}
+
 void process_data() {
     struct send_entry *entry = malloc(sizeof (struct send_entry));
     struct timespec tout_mq;
@@ -41,6 +62,7 @@ void process_data() {
     if (bytes_read >= 0) {
         TAILQ_INSERT_TAIL(&send_q, entry, entries);
         send_queue_length++;
+        data_log_write(entry);
     }
 }
 
@@ -100,38 +122,36 @@ int send_data() {
     return res != CURLE_OK;
 }
 
-void sender_run() {
+void sender_init() {
     L(LOG_DEBUG, "running as sender");
 
     TAILQ_INIT(&send_q);
     curl = curl_easy_init();
-
-    do {
-        struct timespec tout, tnow;
-        CHECK(clock_gettime(CLOCK_REALTIME, &tout) != -1);
-        do {
-            process_data();
-            CHECK(clock_gettime(CLOCK_REALTIME, &tnow) != -1);
-        } while (tnow.tv_sec < tout.tv_sec + TIMEOUT && !stop);
-        while (send_queue_length > 0) {
-            int cnt = build_url();
-            if (cnt > 0) {
-                if (!send_data()) {
-                    remove_entries(cnt);
-                } else {
-                    sleep(TIMEOUT * 2);
-                }
-            }
-        }
-    } while (!stop);
+    data_log_open();
 }
 
 void sender_at_exit() {
     if (curl != NULL) {
         curl_easy_cleanup(curl);
     }
+    data_log_close();
 }
 
-void sender_sig_handler(int signo) {
-    stop = 1;
+void sender_loop() {
+    struct timespec tout, tnow;
+    CHECK(clock_gettime(CLOCK_REALTIME, &tout) != -1);
+    do {
+        process_data();
+        CHECK(clock_gettime(CLOCK_REALTIME, &tnow) != -1);
+    } while (tnow.tv_sec < (tout.tv_sec + TIMEOUT) && !stop);
+    while (send_queue_length > 0) {
+        int cnt = build_url();
+        if (cnt > 0) {
+            if (!send_data()) {
+                remove_entries(cnt);
+            } else {
+                sleep(TIMEOUT * 2);
+            }
+        }
+    }
 }

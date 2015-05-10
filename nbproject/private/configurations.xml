@@ -4,7 +4,7 @@
   <confs>
     <conf name="Debug" type="1">
       <toolsSet>
-        <developmentServer>pi@raspberrypi:22</developmentServer>
+        <developmentServer>pi@raspberrypi.fritz.box:22</developmentServer>
         <platform>2</platform>
       </toolsSet>
       <dbx_gdbdebugger version="1">
@@ -43,7 +43,7 @@
     </conf>
     <conf name="Release" type="1">
       <toolsSet>
-        <developmentServer>pi@raspberrypi:22</developmentServer>
+        <developmentServer>pi@raspberrypi.fritz.box:22</developmentServer>
         <platform>2</platform>
       </toolsSet>
       <dbx_gdbdebugger version="1">

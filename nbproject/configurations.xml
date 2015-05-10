@@ -9,6 +9,9 @@
     <logicalFolder name="ResourceFiles"
                    displayName="Resource Files"
                    projectFiles="true">
+      <itemPath>scripts/config</itemPath>
+      <itemPath>scripts/emonlight</itemPath>
+      <itemPath>scripts/emonlight.conf.example</itemPath>
       <itemPath>scripts/emonlight_init.sh</itemPath>
       <itemPath>scripts/emonlight_start.sh</itemPath>
     </logicalFolder>
@@ -35,16 +38,14 @@
                    kind="IMPORTANT_FILES_FOLDER">
       <itemPath>Makefile</itemPath>
     </logicalFolder>
-    <itemPath>scripts/config</itemPath>
-    <itemPath>scripts/emonlight.conf.example</itemPath>
   </logicalFolder>
   <projectmakefile>Makefile</projectmakefile>
   <confs>
     <conf name="Debug" type="1">
       <toolsSet>
-        <compilerSet>default</compilerSet>
+        <compilerSet>GNU|GNU</compilerSet>
         <dependencyChecking>true</dependencyChecking>
-        <rebuildPropChanged>false</rebuildPropChanged>
+        <rebuildPropChanged>true</rebuildPropChanged>
       </toolsSet>
       <compileType>
         <cTool>
@@ -83,6 +84,8 @@
       </item>
       <item path="scripts/config" ex="false" tool="3" flavor2="0">
       </item>
+      <item path="scripts/emonlight" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="scripts/emonlight.conf.example" ex="false" tool="3" flavor2="0">
       </item>
       <item path="scripts/emonlight_init.sh" ex="false" tool="3" flavor2="0">
@@ -100,7 +103,7 @@
     </conf>
     <conf name="Release" type="1">
       <toolsSet>
-        <compilerSet>default</compilerSet>
+        <compilerSet>GNU|GNU</compilerSet>
         <dependencyChecking>true</dependencyChecking>
         <rebuildPropChanged>false</rebuildPropChanged>
       </toolsSet>
@@ -145,6 +148,8 @@
       <item path="receiver.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="scripts/config" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="scripts/emonlight" ex="false" tool="3" flavor2="0">
       </item>
       <item path="scripts/emonlight.conf.example" ex="false" tool="3" flavor2="0">
       </item>
