@@ -3,7 +3,7 @@
 It's a simple home energy monitor for *Raspberry Pi*, optimized for simplicity and cost effectiveness.
 Features:
 * Power usage levels are read from an standard energy meter with pulse output;
-* Power usage is collected and sent to emoncms.org; 
+* Power usage is collected and sent to [emoncms.org](http://emoncms.org); 
 * Able to drive a buzzer for signaling high-level usage with configurable soft and hard thresholds;
   * soft threshold: 1 to 3 intermittent beeps signal depending on proximity to time limit; default for soft limit is set to 3300Wh with a time limit of 3 hours;
   * hard threshold: 4 to 6 intermittent beeps signal depending on proximity to time limit; default for hard limit is set to 4000Wh with a time limit of 4 minutes;
@@ -14,8 +14,8 @@ Features:
 * Raspberry Pi
 * energy meter with pulse output
 * Raspberry's 5V power supply (minimum 1200mA)
-* optional buzzer (like this )
-* wiring for pulse output asnd buzzer connections
+* optional buzzer
+* wiring for pulse output and buzzer
 
 ### Raspberry
 
