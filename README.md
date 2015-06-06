@@ -1,17 +1,16 @@
 # emonLight
 
-## Project
-
 It's a simple home energy monitor for *Raspberry Pi*, optimized for simplicity and cost effectiveness.
 Features:
 * Power usage levels are read from an standard energy meter with pulse output;
 * Power usage is collected and sent to emoncms.org; 
 * Able to drive a buzzer for signaling high-level usage with configurable soft and hard thresholds;
-** soft threshold: 1 to 3 intermittent beeps signal depending on proximity to time limit; default for soft limit is set to 3300Wh with a time limit of 3 hours;
-** hard threshold: 4 to 6 intermittent beeps signal depending on proximity to time limit; default for hard limit is set to 4000Wh with a time limit of 4 minutes;
+  * soft threshold: 1 to 3 intermittent beeps signal depending on proximity to time limit; default for soft limit is set to 3300Wh with a time limit of 3 hours;
+  * hard threshold: 4 to 6 intermittent beeps signal depending on proximity to time limit; default for hard limit is set to 4000Wh with a time limit of 4 minutes;
 
 
 ## Hardware
+
 * Raspberry Pi
 * energy meter with pulse output
 * Raspberry's 5V power supply (minimum 1200mA)
@@ -39,25 +38,27 @@ Due to the constraint above, be aware that buzzer must have:
 * built-in oscillator
 * driven by 3.3V
 
-Here an example of such a buzzer
-* https://www.adafruit.com/products/1536
+Here an example of such a buzzer https://www.adafruit.com/products/1536
 
 
 ### Wiring
 
 Pulse output can be directly connected to GPIO pins, be warned that internal pull-up resistance have to be enabled for GPIO pin used.
 
-| Energy meter | Raspberry GPIO |
-| S0- | GND PIN |
-| S0+ | GPIO PIN |
+<table>
+<tr><th> Energy meter </th><th> Raspberry GPIO </th></tr>
+<tr><td> S0- </td><td> GND PIN </td></tr>
+<tr><td> S0+ </td><td> GPIO PIN </td></tr>
+</table>
 
 Default pin for pulse reading is GPIO 17.
 
 Buzzer can be directly connected to GPIO pins.
 
-| Buzzer | Raspberry GPIO |
-| PIN - | GND PIN |
-| PIN + | GPIO PIN |
+<table>
+<tr><th> Buzzer </th><th> Raspberry GPIO </th></tr>
+<tr><td> PIN - </td><td> GND PIN </td></tr>
+<tr><td> PIN + </td><td> GPIO PIN </td></tr>
 
 There is no default for buzzer pin, therefore you have to explicity configure it in order to enable buzzer functionality.
 
@@ -85,27 +86,33 @@ Needed Libraries:
 install wiringPi library following instruction [here] (http://wiringpi.com/download-and-install/)
 	
 install libraries
-    sudo apt-get install libconfig-dev libcurl4-gnutls-dev 
+
+	sudo apt-get install libconfig-dev libcurl4-gnutls-dev 
 	
 retrieve source code from github
-    git clone github....
+
+	git clone github....
 
 build
-    cd emonlight
-    make
+
+	cd emonlight
+	make
 
 install system service named *emonlight*
-    sudo make install
+
+	sudo make install
 
 setup configuration for service; default pins are GPIO 17 for pulse output reading and GPIO 3 for buzzer control; if you need different setup you have to change:
 * */etc/default/emonlight* which contains GPIO pins and queue configuration
 * */etc/emonlight.conf* which contains program settings
 
 start service
-    sudo service emonlight start
+
+	sudo service emonlight start
 
 stop service
-    sudo service emonlight stop
+
+	sudo service emonlight stop
 
 
 ### configuration
@@ -113,23 +120,23 @@ stop service
 #### GPIO configuration
 Configuration of GPIO pins must be performed before first program execution.
 
-    # configure input pin for reading pulse signal
-    gpio -g mode 17 in
-    # enable pull-up resistance for GPIO 17
-    gpio -g mode 17 up
-    # enable interrupt sensing for falling edge signal on GPIO 17 pin
-    gpio edge 17 falling
-    # configure output pin for buzzer control 
-    gpio -g mode 3 out
-    # set to zero level buzzer pin
-    gpio -g write 3 0
-    #export above configuration in order to be handled by program without privileges
-    gpio exports
+	# configure input pin for reading pulse signal
+	gpio -g mode 17 in
+	# enable pull-up resistance for GPIO 17
+	gpio -g mode 17 up
+	# enable interrupt sensing for falling edge signal on GPIO 17 pin
+	gpio edge 17 falling
+	# configure output pin for buzzer control 
+	gpio -g mode 3 out
+	# set to zero level buzzer pin
+	gpio -g write 3 0
+	#export above configuration in order to be handled by program without privileges
+	gpio exports
 
 #### queue configuration
 Setup is needed for a queue, a value of 2048 is a pretty good default
 
-    sudo echo 2048 > /proc/sys/fs/mqueue/msg_max
+	sudo echo 2048 > /proc/sys/fs/mqueue/msg_max
 
 
 ### configuration file 
