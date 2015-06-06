@@ -11,10 +11,13 @@ DEFAULT_ARGS="-q $MSG_MAX --data-log"
 
 # configure input pin for reading pulse signal
 gpio -g mode 17 in
+# enable pull-up resistance for GPIO 17
 gpio -g mode 17 up
+# enable interrupt sensing for falling edge signal on GPIO 17 pin
 gpio edge 17 falling
 # configure output pin for buzzer control 
 gpio -g mode 3 out
-gpio export 3 out
+# set to zero level buzzer pin
 gpio -g write 3 0
-#gpio exports
+#export above configuration in order to be handled by program without privileges
+gpio exports

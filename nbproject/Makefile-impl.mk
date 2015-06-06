@@ -24,7 +24,7 @@ CLEAN_SUBPROJECTS=${CLEAN_SUBPROJECTS_${SUBPROJECTS}}
 
 
 # Project Name
-PROJECTNAME=emonlight
+PROJECTNAME=emonLight
 
 # Active Configuration
 DEFAULTCONF=Debug
