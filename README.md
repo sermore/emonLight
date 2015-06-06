@@ -66,13 +66,17 @@ There is no default for buzzer pin, therefore you have to explicity configure it
 
 ## Software
 
-Software is written in C. 
+Software is written in C.
+
 Development has been done with [netbeans](www.netbeans.org) connecting to a raspberry B+ device running [Raspbian](http://www.raspbian.org]), but any other distro will do.
-the build system is based on Makefile. 
+
+The build system is based on Makefile.
+
 Program doesn't require special privileges, When it is executed as a daemon it defaults to use system wide configuration in order to be handled by a debian-compatible sytem installed service.
+
 Raspberry GPIO configuraton must be performed before program can be executed, otherwise it will fail asking for root permission.
 
-Needed Libraries:
+Required Libraries:
 * [libcurl](http://curl.haxx.se/libcurl/)
 * [wiringPi](http://wiringpi.com/)
 * [libconfig](http://www.hyperrealm.com/libconfig/)
