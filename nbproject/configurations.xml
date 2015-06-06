@@ -38,6 +38,7 @@
                    kind="IMPORTANT_FILES_FOLDER">
       <itemPath>Makefile</itemPath>
     </logicalFolder>
+    <itemPath>LICENSE.txt</itemPath>
   </logicalFolder>
   <projectmakefile>Makefile</projectmakefile>
   <confs>
@@ -63,6 +64,8 @@
           <commandLine>-lrt -lcurl -lwiringPi -lconfig</commandLine>
         </linkerTool>
       </compileType>
+      <item path="LICENSE.txt" ex="false" tool="3" flavor2="0">
+      </item>
       <folder path="TestFiles">
         <linkerTool>
           <commandLine>-lrt -lcurl -lwiringPi -lconfig</commandLine>
@@ -133,6 +136,8 @@
           </linkerLibItems>
         </linkerTool>
       </compileType>
+      <item path="LICENSE.txt" ex="false" tool="3" flavor2="0">
+      </item>
       <folder path="TestFiles/f1">
         <linkerTool>
           <output>${TESTDIR}/TestFiles/f1</output>
