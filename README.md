@@ -59,6 +59,7 @@ Buzzer can be directly connected to GPIO pins.
 <tr><th> Buzzer </th><th> Raspberry GPIO </th></tr>
 <tr><td> PIN - </td><td> GND PIN </td></tr>
 <tr><td> PIN + </td><td> GPIO PIN </td></tr>
+</table>
 
 There is no default for buzzer pin, therefore you have to explicity configure it in order to enable buzzer functionality.
 
@@ -91,7 +92,7 @@ install libraries
 	
 retrieve source code from github
 
-	git clone github....
+	git clone https://github.com/sermore/emonLight.git
 
 build
 
@@ -115,8 +116,6 @@ stop service
 	sudo service emonlight stop
 
 
-### configuration
-
 #### GPIO configuration
 Configuration of GPIO pins must be performed before first program execution.
 
@@ -132,6 +131,7 @@ Configuration of GPIO pins must be performed before first program execution.
 	gpio -g write 3 0
 	#export above configuration in order to be handled by program without privileges
 	gpio exports
+
 
 #### queue configuration
 Setup is needed for a queue, a value of 2048 is a pretty good default
