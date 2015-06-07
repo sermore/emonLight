@@ -122,15 +122,18 @@ help: .help-post
 
 install: build
 	if [ -x "/etc/init.d/${CND_ARTIFACT_NAME_${CONF}}" ]; then service $(CND_ARTIFACT_NAME_${CONF}) stop; fi
-	${CP} scripts/config /etc/default/${CND_ARTIFACT_NAME_${CONF}}
-	${CP} scripts/${CND_ARTIFACT_NAME_${CONF}} /etc/init.d
-	${CP} ${CND_ARTIFACT_PATH_${CONF}} /usr/local/bin
+	${CP} -n scripts/config /etc/default/${CND_ARTIFACT_NAME_${CONF}}
+	${CP} -f scripts/${CND_ARTIFACT_NAME_${CONF}} /etc/init.d
+	chmod a+x /etc/init.d/${CND_ARTIFACT_NAME_${CONF}}
+	${CP} -f ${CND_ARTIFACT_PATH_${CONF}} /usr/local/bin
+	update-rc.d ${CND_ARTIFACT_NAME_${CONF}} defaults 90 10
 	service ${CND_ARTIFACT_NAME_${CONF}} start
 
 uninstall:
 	service ${CND_ARTIFACT_NAME_${CONF}} stop
 	${RM} /etc/default/${CND_ARTIFACT_NAME_${CONF}}
 	${RM} /etc/init.d/${CND_ARTIFACT_NAME_${CONF}}
+	update-rc.d ${CND_ARTIFACT_NAME_${CONF}} remove
 	${RM} /usr/local/bin/${CND_ARTIFACT_NAME_${CONF}}
 
 # include project implementation makefile
