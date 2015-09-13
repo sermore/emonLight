@@ -63,9 +63,14 @@ extern "C" {
     } \
 
 #define TIMEOUT 5
-#define EMOCMS_URL "http://emoncms.org"
+#define EMONCMS_URL "http://emoncms.org"
 /* http://emoncms.org/input/bulk.json?data=[[-10,16,1137],[-8,17,1437,3164],[-6,19,1412,3077]]&time=1429335402 */
-#define EMOCMS_PATH "/input/bulk.json"
+#define EMONCMS_PATH "/input/bulk.json"
+    
+#define EMONCMS_REMOTE "emoncms"
+#define EMONLIGHT_REMOTE "emonlight"
+#define EMONCMS_REMOTE_ID 1
+#define EMONLIGHT_REMOTE_ID 2
     
 struct send_entry {
     TAILQ_ENTRY(send_entry) entries;
@@ -82,7 +87,10 @@ TAILQ_HEAD(send_queue, send_entry);
 
 struct cfg_t {
     const char *config;
-    const char *emocms_url;
+    int remote;
+    const char *url;
+    char* api_key;
+    int node_id;
     short daemonize;
     short receiver;
     short sender;
@@ -99,8 +107,6 @@ struct cfg_t {
     int power_hard_threshold_time;
     int power_hard_limit;
     short buzzer_test;
-    char* api_key;
-    int node_id;
     char *data_log;
     short data_log_defaults;
     const char *pid_path;

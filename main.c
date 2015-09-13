@@ -29,7 +29,9 @@
 
 struct cfg_t cfg = {
     .config = NULL,
-    .emocms_url = NULL,
+    .url = NULL,
+    .api_key = NULL,
+    .node_id = -1,
     .daemonize = -1,
     .receiver = 0,
     .sender = 0,
@@ -41,8 +43,6 @@ struct cfg_t cfg = {
     .power_soft_threshold = 0,
     .buzzer_test = 0,
     .ppkwh = 0,
-    .api_key = NULL,
-    .node_id = -1,
     .data_log = NULL,
     .data_log_defaults = 0,
     .pid_path = NULL,
@@ -88,9 +88,10 @@ void parse_opts(int argc, char **argv) {
             {"queue-size", required_argument, 0, 'q'},
             {"verbose", no_argument, 0, 'v'},
             {"pulse-pin", required_argument, 0, 'p'},
+            {"remote", required_argument, 0, 'i'},
             {"api-key", required_argument, 0, 'k'},
             {"node-id", required_argument, 0, 'n'},
-            {"emocms-url", required_argument, 0, 'e'},
+            {"url", required_argument, 0, 'e'},
             {"data-log", optional_argument, 0, 'l'},
             {"pid-path", required_argument, 0, 't'},
             {"data-store", required_argument, 0, 'a'},
@@ -107,7 +108,7 @@ void parse_opts(int argc, char **argv) {
             {0, 0, 0, 0}
         };
 
-        c = getopt_long(argc, argv, "c:drsuq:vp:k:ne:l::t:a:w:b:o:y:f:m:x:g:zh", long_options, &option_index);
+        c = getopt_long(argc, argv, "c:drsuq:vp:i:k:ne:l::t:a:w:b:o:y:f:m:x:g:zh", long_options, &option_index);
         if (c == -1)
             break;
         switch (c) {
@@ -132,6 +133,12 @@ void parse_opts(int argc, char **argv) {
             case 'q':
                 optarg_to_int(&cfg.queue_size, argv[optind]);
                 break;
+            case 'i':
+                if (strcasecmp(EMONLIGHT_REMOTE, optarg) == 0)
+                    cfg.remote = EMONLIGHT_REMOTE_ID;
+                else if (strcasecmp(EMONCMS_REMOTE, optarg) == 0)
+                    cfg.remote = EMONCMS_REMOTE_ID;
+                break;
             case 'k':
                 cfg.api_key = optarg;
                 break;
@@ -139,7 +146,7 @@ void parse_opts(int argc, char **argv) {
                 cfg.config = optarg;
                 break;
             case 'e':
-                cfg.emocms_url = optarg;
+                cfg.url = optarg;
                 break;
             case 'n':
                 optarg_to_int(&cfg.node_id, argv[optind]);
@@ -283,23 +290,28 @@ int read_config(const char *config_file) {
             }
         }
         if (cfg.sender) {
+            if (cfg.remote == 0) {
+                if (config_lookup_string(&config, "remote", &str))
+                    cfg.remote = strcasecmp(EMONLIGHT_REMOTE, str) == 0 ? 
+                        EMONLIGHT_REMOTE_ID : ( strcasecmp(EMONCMS_REMOTE, str) == 0 ? EMONCMS_REMOTE_ID : 0 );                
+            }
+            if (cfg.remote == 0)
+                cfg.remote = EMONCMS_REMOTE_ID;
+            
             if (cfg.api_key == NULL) {
                 if (config_lookup_string(&config, "api-key", &str))
                     cfg.api_key = strdup(str);
             }
-            if (cfg.emocms_url == NULL) {
-                if (config_lookup_string(&config, "emocms-url", &str))
-                    cfg.emocms_url = strdup(str);
+            if (cfg.url == NULL) {
+                if (config_lookup_string(&config, "url", &str))
+                    cfg.url = strdup(str);
                 else {
-                    cfg.emocms_url = EMOCMS_URL;
+                    cfg.url = EMONCMS_URL;
                 }
             }
             if (cfg.node_id == -1) {
                 if (config_lookup_int(&config, "node-id", &tmp))
                     cfg.node_id = tmp;
-                else {
-                    cfg.node_id = 1;
-                }
             }
             if (cfg.data_log == NULL) {
                 if (config_lookup_string(&config, "data-log", &str)) {
@@ -403,7 +415,7 @@ int read_config(const char *config_file) {
         config_destroy(&config);
     }
     if (cfg.sender && cfg.api_key == NULL) {
-        L(LOG_WARNING, "No value found for api-key.");
+        L(LOG_ERR, "No value found for api-key.");
         return 2;
     }
     return 0;
@@ -420,9 +432,10 @@ void help() {
             "-q, --queue-size=NUMBER                set queue length to NUMBER\n"
             "-v, --verbose                          enable verbose print and log\n"
             "-p, --pulse-pin=NUMBER                 use pin NUMBER as input for reading pulse signal, use GPIO numbering\n"
-            "-k --api-key=API_KEY                   use API_KEY for communication to emoncms.org\n"
-            "-n --node-id=NODE_NUMBER               use NODE_NUMBER as node-id for emoncms.org\n"
-            "-e, --emocms-url=URL                   use URL to connecto to emoncms.org instance\n"
+            "-i, --remote=[EMONCMS|EMONLIGHT]       select remote server to connect to\n"
+            "-k --api-key=API_KEY                   use API_KEY for communication to remote server\n"
+            "-n --node-id=NODE_NUMBER               use NODE_NUMBER as node-id for remote server\n"
+            "-e, --url=URL                          use URL to connecto to remote server instance\n"
             "-l, --data-log=FILE                    append to FILE data retrieved\n"
             "-t, --pid-path=PATH                    store pid file in directory PATH\n"
             "-a, --data-store=FILE                  save receiver status on termination\n"
@@ -444,9 +457,10 @@ void help() {
             "queue size %d\n"
             "verbose mode %s\n"
             "pulse pin %d\n"
+            "remote server %s\n"
             "api key %s\n"
             "node id %d\n"
-            "emoncms URL %s\n"
+            "remote server URL %s\n"
             "data log file %s\n"
             "path for pid file %s\n"
             "data store file %s\n"
@@ -458,8 +472,9 @@ void help() {
             "power hard threshold time (seconds) %d\n",
             cfg.config, YN(cfg.daemonize), YN(cfg.receiver), YN(cfg.sender), 
             YN(cfg.unlink_queue), cfg.queue_size, YN(cfg.verbose), 
-            cfg.pulse_pin, cfg.api_key, cfg.node_id, cfg.emocms_url,
-            cfg.data_log, cfg.pid_path, cfg.data_store, cfg.ppkwh, cfg.buzzer_pin,
+            cfg.pulse_pin, cfg.remote == EMONLIGHT_REMOTE_ID ? EMONLIGHT_REMOTE : EMONCMS_REMOTE, 
+            cfg.api_key, cfg.node_id, cfg.url, cfg.data_log, cfg.pid_path, 
+            cfg.data_store, cfg.ppkwh, cfg.buzzer_pin,
             cfg.power_soft_threshold, cfg.power_soft_threshold_time,
             cfg.power_hard_threshold, cfg.power_hard_threshold_time);
     exit(EXIT_FAILURE);

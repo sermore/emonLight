@@ -80,7 +80,7 @@ void process_data() {
     ssize_t bytes_read;
     CHECK(clock_gettime(CLOCK_REALTIME, &tout_mq) != -1);
     tout_mq.tv_sec += TIMEOUT / 2;
-    bytes_read = mq_timedreceive(mq, (char*) entry, sizeof (struct send_entry), NULL, &tout_mq);
+    bytes_read = mq_timedreceive(mq, (void*) entry, sizeof (struct send_entry), NULL, &tout_mq);
     if (bytes_read >= 0) {
         TAILQ_INSERT_TAIL(&send_q, entry, entries);
         send_queue_length++;
@@ -88,14 +88,14 @@ void process_data() {
     }
 }
 
-int build_url() {
+int build_url_emoncms() {
     // in case of no points were added, avoid to process data and wait for more 
     if (TAILQ_EMPTY(&send_q))
         return 0;
     int send_cnt = send_queue_length > 20 ? 20 : send_queue_length;
     int cnt = 0;
-    char *pstr = stpcpy(send_buf, cfg.emocms_url);
-    pstr = stpcpy(pstr, EMOCMS_PATH);
+    char *pstr = stpcpy(send_buf, cfg.url);
+    pstr = stpcpy(pstr, EMONCMS_PATH);
     pstr = stpcpy(pstr, "?apikey=");
     pstr = stpcpy(pstr, cfg.api_key);
     pstr = stpcpy(pstr, "&data=[");
@@ -128,20 +128,74 @@ int build_url() {
     return cnt;
 }
 
+int build_url_emonlight() {
+    // in case of no points were added, avoid to process data and wait for more 
+    if (TAILQ_EMPTY(&send_q))
+        return 0;
+    int send_cnt = send_queue_length > 20 ? 20 : send_queue_length;
+    int cnt = 0;
+    char buffer[1024];
+    memset(buffer,0, sizeof(buffer));
+    char *token = curl_easy_escape(curl, cfg.api_key, strlen(cfg.api_key));
+    sprintf(send_buf, "token=%s", token);
+    curl_free(token);
+    if (cfg.node_id > 0) {
+        sprintf(buffer, "node_id=%d", cfg.node_id);
+        sprintf(send_buf, "%s&%s", send_buf, buffer);
+    }
+    struct send_entry * p = TAILQ_FIRST(&send_q);
+
+    TAILQ_FOREACH(p, &send_q, entries) {
+        long t = p->trec.tv_sec;
+        struct tm lt;
+        char strd[26];
+        strftime(strd, sizeof (strd), "%F %T", localtime_r(&t, &lt));
+        L(LOG_DEBUG, "prepare %s: DT=%f, P=%ld, Power=%f, Elapsed kWh=%f", strd, p->dt, p->pulseCount, p->power, p->elapsedkWh);
+        sprintf(buffer, "%ld,%ld", p->trec.tv_sec, p->trec.tv_nsec);
+        char * param  = curl_easy_escape(curl, buffer, strlen(buffer));
+        sprintf(send_buf, "%s&epoch_time[]=%s", send_buf, param);        
+        curl_free(param);
+        sprintf(buffer, "%f", p->power);
+        param  = curl_easy_escape(curl, buffer, strlen(buffer));
+        sprintf(send_buf, "%s&power=%s", send_buf, param);        
+        curl_free(param);
+        ++cnt;
+        if (strlen(send_buf) > sizeof (send_buf) - 100)
+            break;
+        if (cnt >= send_cnt)
+            break;
+    }
+    return cnt;
+}
+
 int send_data() {
     if (!curl)
         return 1;
-
-    curl_easy_setopt(curl, CURLOPT_URL, send_buf);
-    //    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    
+    char *out = NULL;
+    if (cfg.remote == EMONCMS_REMOTE_ID) {
+        curl_easy_setopt(curl, CURLOPT_URL, send_buf);
+    } else {
+        curl_easy_setopt(curl, CURLOPT_URL, cfg.url);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(send_buf));
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, send_buf);
+    }
     CURLcode res = curl_easy_perform(curl);
+    long http_code = 0;
     if (res != CURLE_OK) {
         L(LOG_WARNING, "send failed: %s : \"%s\"", curl_easy_strerror(res), send_buf);
     } else {
-        L(LOG_DEBUG, "send OK: \"%s\"", send_buf);
+        curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
+        if (http_code == 200 && res != CURLE_ABORTED_BY_CALLBACK) {
+            L(LOG_DEBUG, "send OK: \"%s\"", send_buf);
+        } else {
+            L(LOG_WARNING, "send failed: HTTP response %ld : \"%s\"", http_code, send_buf);
+        }
     }
+    if (out != NULL)
+        curl_free(out);
     curl_easy_reset(curl);
-    return res != CURLE_OK;
+    return res != CURLE_OK || http_code != 200;
 }
 
 void sender_init() {
@@ -167,7 +221,7 @@ void sender_loop() {
         CHECK(clock_gettime(CLOCK_REALTIME, &tnow) != -1);
     } while (tnow.tv_sec < (tout.tv_sec + TIMEOUT) && !stop);
     while (send_queue_length > 0) {
-        int cnt = build_url();
+        int cnt = cfg.remote == EMONCMS_REMOTE_ID ? build_url_emoncms() : build_url_emonlight();
         if (cnt > 0) {
             if (!send_data()) {
                 remove_entries(cnt);

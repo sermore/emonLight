@@ -44,7 +44,8 @@ extern char send_buf[1024];
 extern double soft_power_acc;
 extern double hard_power_acc;
 
-extern int build_url();
+extern int build_url_emoncms();
+extern int build_url_emonlight();
 extern double calc_power(double dt);
 extern struct send_entry *insert_entry(struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount);
 extern mqd_t open_pulse_queue(int oflag);
@@ -95,7 +96,7 @@ void testPARSE_OPTS(void) {
 }
 
 void testREAD_CONFIG(void) {
-    bzero(&cfg, sizeof (cfg));
+    memset(&cfg, 0, sizeof (cfg));
     CU_ASSERT_PTR_NULL(cfg.config);
     CU_ASSERT_EQUAL(cfg.pulse_pin, 0);
     CU_ASSERT_EQUAL(cfg.queue_size, 0);
@@ -104,7 +105,7 @@ void testREAD_CONFIG(void) {
     CU_ASSERT_EQUAL(init_config("XXXX"), 2);
     CU_ASSERT_EQUAL_FATAL(init_config("tests/emonlight.conf"), 0);
     CU_ASSERT_STRING_EQUAL(cfg.api_key, "1234567890KK");
-    CU_ASSERT_STRING_EQUAL(cfg.emocms_url, "http://xx.yy.zz");
+    CU_ASSERT_STRING_EQUAL(cfg.url, "http://xx.yy.zz");
     //    printf("P=%d, Q=%d\n", cfg.pin, cfg.queue_size);
     CU_ASSERT_EQUAL(cfg.pulse_pin, 12);
     CU_ASSERT_EQUAL(cfg.queue_size, 345);
@@ -143,14 +144,15 @@ void testINSERT_ENTRY(void) {
     CU_ASSERT_EQUAL(e->pulseCount, 2);
 }
 
-void testBUILD_URL(void) {
+void testBUILD_URL_EMONCMS(void) {
+    memset(send_buf, 0, sizeof(send_buf));
     CU_ASSERT_EQUAL(init_config("tests/emonlight.conf"), 0);
     cfg.verbose = 0;
     TAILQ_INIT(&send_q);
     struct timespec t0 = {1234567890, 123456789};
     struct timespec t1 = {1234567900, 123456789};
     insert_entry(t0, t1, 10, calc_power(10), 0.003, 1);
-    int cnt = build_url();
+    int cnt = build_url_emoncms();
     //printf("P=%f, L=%d, QQ=%s\n", calc_power(10), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 1);
     CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1]]&time=1234567891");
@@ -159,7 +161,7 @@ void testBUILD_URL(void) {
     insert_entry(t1, t0, 1, calc_power(1), 0.004, 2);
     CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567900);
     CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567901);
-    cnt = build_url();
+    cnt = build_url_emoncms();
     //printf("P=%f, L=%d, QQ=%s\n", calc_power(1), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 2);
     CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1],[10,56,3600.000000,0.004000,2]]&time=1234567891");
@@ -168,7 +170,7 @@ void testBUILD_URL(void) {
     insert_entry(t0, t1, 3, calc_power(3), 0.005, 3);
     CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567901);
     CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
-    cnt = build_url();
+    cnt = build_url_emoncms();
     //printf("P=%f, L=%d, QQ=%s\n", calc_power(3), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 3);
     CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1],[10,56,3600.000000,0.004000,2],[11,56,1200.000000,0.005000,3],[13,56,1200.000000,0.005000,3]]&time=1234567891");
@@ -178,7 +180,7 @@ void testBUILD_URL(void) {
     insert_entry(t1, t0, 0.5, calc_power(0.5), 0.006, 4);
     CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
     CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
-    cnt = build_url();
+    cnt = build_url_emoncms();
     //printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(0.5), cnt, strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 4);
     CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1],[10,56,3600.000000,0.004000,2],[11,56,1200.000000,0.005000,3],[13,56,1200.000000,0.005000,3],[14,56,7200.000000,0.006000,4]]&time=1234567891");
@@ -189,10 +191,63 @@ void testBUILD_URL(void) {
     insert_entry(t0, t1, 0.4, calc_power(0.4), 0.007, 5);
     CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
     CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567905);
-    cnt = build_url();
+    cnt = build_url_emoncms();
     //    printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(0.5), cnt, strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 5);
     CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1],[10,56,3600.000000,0.004000,2],[11,56,1200.000000,0.005000,3],[13,56,1200.000000,0.005000,3],[14,56,7200.000000,0.006000,4],[14,56,9000.000000,0.007000,5]]&time=1234567891");
+}
+
+void testBUILD_URL_EMONLIGHT(void) {
+    memset(send_buf, 0, sizeof(send_buf));
+    CU_ASSERT_EQUAL(init_config("tests/emonlight.conf"), 0);
+    cfg.verbose = 0;
+    TAILQ_INIT(&send_q);
+    struct timespec t0 = {1234567890, 123456789};
+    struct timespec t1 = {1234567900, 123456789};
+    insert_entry(t0, t1, 10, calc_power(10), 0.003, 1);
+    int cnt = build_url_emonlight();
+//    printf("Q='%s'\n", send_buf);
+    CU_ASSERT_EQUAL(cnt, 1);
+    CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000");
+
+    t0.tv_sec = t1.tv_sec + 1;
+    insert_entry(t1, t0, 1, calc_power(1), 0.004, 2);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567900);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567901);
+    cnt = build_url_emonlight();
+//    printf("Q='%s'\n", send_buf);
+    CU_ASSERT_EQUAL(cnt, 2);
+    CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000&epoch_time[]=1234567901%2C123456789&power=3600.000000");
+
+    t1.tv_sec = t0.tv_sec + 3;
+    insert_entry(t0, t1, 3, calc_power(3), 0.005, 3);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567901);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
+    cnt = build_url_emonlight();
+//    printf("Q='%s'\n", send_buf);
+    CU_ASSERT_EQUAL(cnt, 3);
+    CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000&epoch_time[]=1234567901%2C123456789&power=3600.000000&epoch_time[]=1234567904%2C123456789&power=1200.000000");
+
+    t0.tv_sec = t1.tv_sec;
+    t0.tv_nsec += 500000000;
+    insert_entry(t1, t0, 0.5, calc_power(0.5), 0.006, 4);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
+    cnt = build_url_emonlight();
+//    printf("Q='%s'\n", send_buf);
+    CU_ASSERT_EQUAL(cnt, 4);
+    CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000&epoch_time[]=1234567901%2C123456789&power=3600.000000&epoch_time[]=1234567904%2C123456789&power=1200.000000&epoch_time[]=1234567904%2C623456789&power=7200.000000");
+
+    cfg.verbose = 0;
+    t1.tv_sec++;
+    t1.tv_nsec -= 100000000;
+    insert_entry(t0, t1, 0.4, calc_power(0.4), 0.007, 5);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567905);
+    cnt = build_url_emonlight();
+//    printf("Q='%s'\n", send_buf);
+    CU_ASSERT_EQUAL(cnt, 5);
+    CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000&epoch_time[]=1234567901%2C123456789&power=3600.000000&epoch_time[]=1234567904%2C123456789&power=1200.000000&epoch_time[]=1234567904%2C623456789&power=7200.000000&epoch_time[]=1234567905%2C23456789&power=9000.000000");
 }
 
 void testCALC_BUZZER_PULSES(void) {
@@ -210,7 +265,7 @@ void testCALC_BUZZER_PULSES(void) {
     CU_ASSERT_EQUAL(calc_buzzer_pulses(3300, 0), 1);
     CU_ASSERT_EQUAL(calc_buzzer_pulses(3800, 0), 1);
     CU_ASSERT_EQUAL(calc_buzzer_pulses(4000, 0), 4);
-    printf("P=%d\n", calc_buzzer_pulses(3300, 4.001/3));
+//    printf("P=%d\n", calc_buzzer_pulses(3300, 4.001/3));
     CU_ASSERT_EQUAL(calc_buzzer_pulses(3300, 4.001/3), 2);
     CU_ASSERT_EQUAL(calc_buzzer_pulses(3800, 8.001/3), 3);
     CU_ASSERT_EQUAL(calc_buzzer_pulses(3900, 4), 4);
@@ -239,7 +294,8 @@ int main() {
             || (NULL == CU_add_test(pSuite, "testGET_CONFIG_FILE", testGET_CONFIG_FILE))
             || (NULL == CU_add_test(pSuite, "testREAD_CONFIG", testREAD_CONFIG))
             || (NULL == CU_add_test(pSuite, "testINSERT_ENTRY", testINSERT_ENTRY))
-            || (NULL == CU_add_test(pSuite, "testBUILD_URL", testBUILD_URL))
+            || (NULL == CU_add_test(pSuite, "testBUILD_URL_EMONCMS", testBUILD_URL_EMONCMS))
+            || (NULL == CU_add_test(pSuite, "testBUILD_URL_EMONLIGHT", testBUILD_URL_EMONLIGHT))
             || (NULL == CU_add_test(pSuite, "testCALC_BUZZER_PULSES", testCALC_BUZZER_PULSES))
             ) {
         CU_cleanup_registry();
