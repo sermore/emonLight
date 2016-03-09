@@ -21,7 +21,7 @@ FC=gfortran
 AS=as
 
 # Macros
-CND_PLATFORM=GNU-Linux-x86
+CND_PLATFORM=GNU-Linux
 CND_DLIB_EXT=so
 CND_CONF=Debug
 CND_DISTDIR=dist
@@ -45,6 +45,10 @@ TESTDIR=${CND_BUILDDIR}/${CND_CONF}/${CND_PLATFORM}/tests
 # Test Files
 TESTFILES= \
 	${TESTDIR}/TestFiles/f1
+
+# Test Object Files
+TESTOBJECTFILES= \
+	${TESTDIR}/tests/cunittest.o
 
 # C Compiler Flags
 CFLAGS=
@@ -89,7 +93,9 @@ ${OBJECTDIR}/sender.o: nbproject/Makefile-${CND_CONF}.mk sender.c
 .build-subprojects:
 
 # Build Test Targets
-.build-tests-conf: .build-conf ${TESTFILES}
+.build-tests-conf: .build-tests-subprojects .build-conf ${TESTFILES}
+.build-tests-subprojects:
+
 ${TESTDIR}/TestFiles/f1: ${TESTDIR}/tests/cunittest.o ${OBJECTFILES:%.o=%_nomain.o}
 	${MKDIR} -p ${TESTDIR}/TestFiles
 	${LINK.c} -lrt -lcurl -lwiringPi -lconfig  -o ${TESTDIR}/TestFiles/f1 $^ ${LDLIBSOPTIONS} -lcunit 
