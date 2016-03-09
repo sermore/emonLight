@@ -14,5 +14,6 @@ gpio edge 17 falling
 # configure output pin for buzzer control
 gpio export 3 out
 gpio -g mode 3 out
+gpio export 3 out
 gpio -g write 3 0
 #gpio exports
