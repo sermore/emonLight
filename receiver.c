@@ -35,21 +35,19 @@ volatile long pulseCount = 0;
 volatile short buzzer_enabled = 0;
 volatile int buzzer_pulses = 0, buzzer_cnt = 10;
 timer_t buzzer_timerup, buzzer_timerdown;
-double soft_power_acc = 0;
-long soft_power_time = 0;
-double hard_power_acc = 0;
-long hard_power_time;
-
+struct buzzer_alarm_tracker tracker[] = { { 0, 0L, 0, 0L }, { 0, 0L, 0, 0L } };
 
 double calc_power(double dt) {
     return (3600000.0 / dt) / cfg.ppkwh;
 }
 
 static void buzzer_timer_handler(int sig, siginfo_t *si, void *uc) {
-    //printf("Caught signal %d BC=%d, BP=%d\n", sig, buzzer_cnt, buzzer_pulses);
+//    printf("Caught signal %d BC=%d, BP=%d\n", sig, buzzer_cnt, buzzer_pulses);
     if (sig == SIG_UP && buzzer_cnt < buzzer_pulses) {
+//        printf("B1 %d\n", cfg.buzzer_pin);
         digitalWrite(cfg.buzzer_pin, 1);
     } else if (sig == SIG_DOWN) {
+//        printf("B0 %d\n", cfg.buzzer_pin);
         digitalWrite(cfg.buzzer_pin, 0);
         ++buzzer_cnt;
         if (buzzer_cnt >= 10) {
@@ -95,35 +93,54 @@ void buzzer_timer_setup(timer_t *buzzer_timer, int sig, void *handler) {
 static void buzzer_setup() {
     if (cfg.buzzer_pin != -1) {
         buzzer_pulses = 0;
+        tracker[0].power_threshold_kwh = cfg.power_soft_threshold / (1000.0 * 3600.0);
+        tracker[0].time_threshold_sec = cfg.power_soft_threshold_time;
+        tracker[1].power_threshold_kwh = cfg.power_hard_threshold / (1000.0 * 3600.0);
+        tracker[1].time_threshold_sec = cfg.power_hard_threshold_time;
         buzzer_timer_setup(&buzzer_timerup, SIG_UP, buzzer_timer_handler);
         buzzer_timer_setup(&buzzer_timerdown, SIG_DOWN, buzzer_timer_handler);
     }
 }
 
+void buzzer_alarm_tracker_update(struct buzzer_alarm_tracker *t, double elapsedkWh, struct timespec *time) {
+    double tnow = 0.0 + time->tv_sec + time->tv_nsec / 1.0e9;
+    if (t->power_acc_kwh == 0 || t->time_sec == 0) {
+        t->power_acc_kwh = elapsedkWh;
+        t->time_sec = tnow;
+    } else {
+        double de = 0.0 + t->power_threshold_kwh * (tnow - t->time_sec) + t->power_acc_kwh - elapsedkWh;
+        if (de > 0) {
+            if (t->power_acc_kwh + de < elapsedkWh) {
+                // saved power state is still relevant for threshold calculation
+                t->time_sec = tnow - (elapsedkWh - t->power_acc_kwh) / t->power_threshold_kwh;
+                t->power_acc_kwh = t->power_acc_kwh + de;
+            } else {
+                // saved power state is irrelevant for threshold calculation
+                t->time_sec = tnow;
+                t->power_acc_kwh = elapsedkWh;
+            }
+        }
+//        L(LOG_DEBUG, "thr=%f, t->p=%f, p=%f, t=%f, t->t=%f, de=%f", t->power_threshold_kwh, elapsedkWh, t->power_acc_kwh, tnow, t->time_sec, de);
+    }
+}
+
 int calc_buzzer_pulses(double power, double elapsedkWh) {
     int hs_limit = power >= cfg.power_hard_threshold;
-    double dp_kwh = elapsedkWh - (hs_limit ? hard_power_acc : soft_power_acc);
-    double max_p_kwh = 1.0 * (hs_limit ? cfg.power_hard_limit : cfg.power_soft_limit) / 1000;
-    int buzzer_pulses = (hs_limit ? 4 : 1) + 3.0 * (dp_kwh / max_p_kwh);
-    L(LOG_DEBUG, "power usage warning %d, hard=%d, dp=%f, %%%f", buzzer_pulses, hs_limit, dp_kwh, 100 * dp_kwh / max_p_kwh);
+    struct buzzer_alarm_tracker *t = &tracker[hs_limit];
+    double dt_sec = 0.0 + tnow.tv_sec + tnow.tv_nsec / 1.0e9 - t->time_sec;
+    float m = (0.0 + dt_sec) / t->time_threshold_sec;
+    int buzzer_pulses = (hs_limit ? 4 : 1) + (3.0 * m);
+    L(LOG_DEBUG, "power usage warning %d, hard=%d, dt=%f, dt_max=%ld", buzzer_pulses, hs_limit, dt_sec, t->time_threshold_sec);
     return buzzer_pulses;
 }
 
 static void buzzer_control(double power, double elapsedkWh) {
     if (cfg.buzzer_pin == -1)
         return;
-
     // data for hard and soft power limits
-    if (tnow.tv_sec >= cfg.power_soft_threshold_time + soft_power_time) {
-        soft_power_time = tnow.tv_sec;
-        soft_power_acc = elapsedkWh;
-    }
-    if (tnow.tv_sec >= cfg.power_hard_threshold_time + hard_power_time) {
-        hard_power_time = tnow.tv_sec;
-        hard_power_acc = elapsedkWh;
-    }
-    //L(LOG_DEBUG, "soft p=%f, dt=%ld, hard p=%f, dt=%ld", soft_power_acc, tnow.tv_sec - soft_power_time, hard_power_acc, tnow.tv_sec - hard_power_time);
-
+    int hs_limit = power >= cfg.power_hard_threshold;
+    struct buzzer_alarm_tracker *t = &tracker[hs_limit];
+    buzzer_alarm_tracker_update(t, elapsedkWh, &tnow);
     if (power >= cfg.power_soft_threshold || power >= cfg.power_hard_threshold) {
         if (!buzzer_enabled) {
             // buzzer config
@@ -131,15 +148,20 @@ static void buzzer_control(double power, double elapsedkWh) {
             buzzer_cnt = 0;
             buzzer_pulses = calc_buzzer_pulses(power, elapsedkWh);
             long q = 70;
-            struct itimerspec its;
-            its.it_value.tv_sec = 0L;
-            its.it_value.tv_nsec = q * 1000000;
-            its.it_interval.tv_sec = 0L;
-            its.it_interval.tv_nsec = q * 3000000L;
-            CHECK(timer_settime(buzzer_timerup, 0, &its, NULL) != -1);
-            its.it_value.tv_nsec = q * 2000000;
-            its.it_interval.tv_nsec = q * 3000000L;
-            CHECK(timer_settime(buzzer_timerdown, 0, &its, NULL) != -1);
+            struct itimerspec its_up;
+            its_up.it_value.tv_sec = 0L;
+            // set to q * 1 millisecond
+            its_up.it_value.tv_nsec = 1000000L;
+            its_up.it_interval.tv_sec = 0L;
+            // set to q * 3 milliseconds
+            its_up.it_interval.tv_nsec = q * 3000000L;
+            CHECK(timer_settime(buzzer_timerup, 0, &its_up, NULL) != -1);
+            struct itimerspec its_down;
+            its_down.it_value.tv_sec = 0L;
+            its_down.it_value.tv_nsec = q * 2000000L;
+            its_down.it_interval.tv_sec = 0L;
+            its_down.it_interval.tv_nsec = q * 3000000L;
+            CHECK(timer_settime(buzzer_timerdown, 0, &its_down, NULL) != -1);
         }
     }
 }

@@ -115,6 +115,13 @@ struct cfg_t {
     short help;
 };
 
+struct buzzer_alarm_tracker {
+    double power_acc_kwh;
+    double time_sec;
+    double power_threshold_kwh;
+    long time_threshold_sec;
+};
+
 extern struct cfg_t cfg;
 extern mqd_t mq;
 extern volatile int stop;
