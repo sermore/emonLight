@@ -41,8 +41,8 @@ extern int send_queue_length;
 //extern long pulseCount, rawCount;
 //extern struct timespec tstart, tlast;
 extern char send_buf[1024];
-extern double soft_power_acc;
-extern double hard_power_acc;
+extern struct buzzer_config buzzer_config[2];
+extern struct buzzer_power_queue pqueue[2];
 
 extern int build_url_emoncms();
 extern int build_url_emonlight();
@@ -53,7 +53,12 @@ extern void parse_opts(int argc, char **argv);
 extern void cleanup_queue(mqd_t mq);
 extern char* get_config_file(const char *config_file);
 extern int read_config(const char *config_file);
-extern int calc_buzzer_pulses(double power, double elapsedkWh);
+extern void buzzer_setup();
+extern void buzzer_pqueue_push(struct buzzer_power_queue *q, double elapsedkWh, double time);
+extern void buzzer_pqueue_pop(struct buzzer_power_queue *q, double time_interval, double tnow);
+extern double buzzer_pqueue_delta(struct buzzer_power_queue *q, double power_threshold_kwh, double time_threshold_sec);
+extern int buzzer_calc_pulses(struct buzzer_power_queue *q, struct buzzer_config *t);
+
 /*
  * CUnit Test Suite
  */
@@ -250,28 +255,61 @@ void testBUILD_URL_EMONLIGHT(void) {
     CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000&epoch_time[]=1234567901%2C123456789&power=3600.000000&epoch_time[]=1234567904%2C123456789&power=1200.000000&epoch_time[]=1234567904%2C623456789&power=7200.000000&epoch_time[]=1234567905%2C23456789&power=9000.000000");
 }
 
-void testCALC_BUZZER_PULSES(void) {
-    soft_power_acc = 0;
-    hard_power_acc = 0;
+void testBUZZER_CALC_PULSES(void) {
+    cfg.verbose = 1;
+    CU_ASSERT_EQUAL(sizeof(buzzer_config), 2 * sizeof(struct buzzer_config));
+    CU_ASSERT_EQUAL(buzzer_config[0].power_threshold_kwh, 0);
+    CU_ASSERT_EQUAL(buzzer_config[0].time_threshold_sec, 0);
     CU_ASSERT_EQUAL(cfg.power_soft_threshold, 3300);
     CU_ASSERT_EQUAL(cfg.power_hard_threshold, 4000);
+    CU_ASSERT_EQUAL(cfg.power_soft_threshold_time, 3600*3);
     CU_ASSERT_EQUAL(cfg.power_hard_threshold_time, 240);
-    int hs_limit = 1;
-    double max_p_kwh = 1.0 * (hs_limit ? cfg.power_hard_threshold * cfg.power_hard_threshold_time : cfg.power_soft_threshold * cfg.power_soft_threshold_time) / 3600000;
-    CU_ASSERT_DOUBLE_EQUAL(max_p_kwh, 0.2667, 0.01);
-    hs_limit = 0;
-    max_p_kwh = 1.0 * (hs_limit ? cfg.power_hard_threshold * cfg.power_hard_threshold_time : cfg.power_soft_threshold * cfg.power_soft_threshold_time) / 3600000;
-    CU_ASSERT_DOUBLE_EQUAL(max_p_kwh, 9.9, 0.01);
-    CU_ASSERT_EQUAL(calc_buzzer_pulses(3300, 0), 1);
-    CU_ASSERT_EQUAL(calc_buzzer_pulses(3800, 0), 1);
-    CU_ASSERT_EQUAL(calc_buzzer_pulses(4000, 0), 4);
-//    printf("P=%d\n", calc_buzzer_pulses(3300, 4.001/3));
-    CU_ASSERT_EQUAL(calc_buzzer_pulses(3300, 4.001/3), 2);
-    CU_ASSERT_EQUAL(calc_buzzer_pulses(3800, 8.001/3), 3);
-    CU_ASSERT_EQUAL(calc_buzzer_pulses(3900, 4), 4);
-    CU_ASSERT_EQUAL(calc_buzzer_pulses(4100, 0), 4);
-    CU_ASSERT_EQUAL(calc_buzzer_pulses(4100, 0.1), 5);
-    CU_ASSERT_EQUAL(calc_buzzer_pulses(4100, 0.2), 6);
+    buzzer_setup();
+    CU_ASSERT_EQUAL(buzzer_config[0].power_threshold_kwh, cfg.power_soft_threshold / 3.6e6);
+    CU_ASSERT_EQUAL(buzzer_config[0].time_threshold_sec, cfg.power_soft_threshold_time);
+    CU_ASSERT_EQUAL(buzzer_config[0].pulses_init, 1);
+    CU_ASSERT_EQUAL(buzzer_config[1].power_threshold_kwh, cfg.power_hard_threshold / 3.6e6);
+    CU_ASSERT_EQUAL(buzzer_config[1].time_threshold_sec, cfg.power_hard_threshold_time);
+    CU_ASSERT_EQUAL(buzzer_config[1].pulses_init, 4);
+    struct buzzer_config *t = &buzzer_config[0];
+    struct buzzer_power_queue *q = &pqueue[0];
+    double tnow = 500000;
+    double elapsedkwh = 5.001;
+    buzzer_pqueue_push(q, elapsedkwh, tnow);
+    buzzer_pqueue_pop(q, t->time_threshold_sec, tnow);
+    CU_ASSERT_EQUAL(q->tqh_first->power_acc_kwh, elapsedkwh);
+    CU_ASSERT_EQUAL(q->tqh_first->time_sec, tnow);
+    CU_ASSERT_EQUAL(buzzer_calc_pulses(q, t), 1);
+    
+    tnow += 3600;
+    elapsedkwh += 3300.0 / 3.6e6 * 3600;
+    buzzer_pqueue_push(q, elapsedkwh, tnow);
+    buzzer_pqueue_pop(q, t->time_threshold_sec, tnow);
+    CU_ASSERT_EQUAL(buzzer_calc_pulses(q, t), 2);
+
+    tnow += 3600;
+    elapsedkwh += 3301.0 / 3.6e6 * 3600;
+    buzzer_pqueue_push(q, elapsedkwh, tnow);
+    buzzer_pqueue_pop(q, t->time_threshold_sec, tnow);
+    CU_ASSERT_EQUAL(buzzer_calc_pulses(q, t), 3);
+
+    tnow += 3700;
+    elapsedkwh += 3300.0 / 3.6e6;
+    buzzer_pqueue_push(q, elapsedkwh, tnow);
+    buzzer_pqueue_pop(q, t->time_threshold_sec, tnow);
+    CU_ASSERT_EQUAL(buzzer_calc_pulses(q, t), 2);
+
+    tnow += 3600;
+    elapsedkwh += 3300.0 / 3.6e6;
+    buzzer_pqueue_push(q, elapsedkwh, tnow);
+    buzzer_pqueue_pop(q, t->time_threshold_sec, tnow);
+    CU_ASSERT_EQUAL(buzzer_calc_pulses(q, t), 1);
+
+    tnow += 3600;
+    elapsedkwh += 3600 * 3900.0 / 3.6e6;
+    buzzer_pqueue_push(q, elapsedkwh, tnow);
+    buzzer_pqueue_pop(q, t->time_threshold_sec, tnow);
+    CU_ASSERT_EQUAL(buzzer_calc_pulses(q, t), 2);
 }
 
 int main() {
@@ -296,7 +334,7 @@ int main() {
             || (NULL == CU_add_test(pSuite, "testINSERT_ENTRY", testINSERT_ENTRY))
             || (NULL == CU_add_test(pSuite, "testBUILD_URL_EMONCMS", testBUILD_URL_EMONCMS))
             || (NULL == CU_add_test(pSuite, "testBUILD_URL_EMONLIGHT", testBUILD_URL_EMONLIGHT))
-            || (NULL == CU_add_test(pSuite, "testCALC_BUZZER_PULSES", testCALC_BUZZER_PULSES))
+            || (NULL == CU_add_test(pSuite, "testBUZZER_CALC_PULSES", testBUZZER_CALC_PULSES))
             ) {
         CU_cleanup_registry();
         return CU_get_error();

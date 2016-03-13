@@ -543,6 +543,10 @@ int time_str(char *buf, uint len, struct timespec * ts) {
     return 0;
 }
 
+double time_to_double(struct timespec *t) {
+    return 0.0 + t->tv_sec + t->tv_nsec / 1.0e9;
+}
+
 struct send_entry* populate_entry(struct send_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount) {
     time_copy(&entry->tlast, tlast);
     time_copy(&entry->trec, trec);

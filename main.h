@@ -115,12 +115,19 @@ struct cfg_t {
     short help;
 };
 
-struct buzzer_alarm_tracker {
+struct buzzer_config {
+    double power_threshold_kwh; // power threshold 
+    long time_threshold_sec; // interval length for which the power excess can be maintained
+    int pulses_init; // initial number of pulses to apply
+};
+
+struct buzzer_power_entry {
+    TAILQ_ENTRY(buzzer_power_entry) entries;
     double power_acc_kwh;
     double time_sec;
-    double power_threshold_kwh;
-    long time_threshold_sec;
 };
+
+TAILQ_HEAD(buzzer_power_queue, buzzer_power_entry);
 
 extern struct cfg_t cfg;
 extern mqd_t mq;
@@ -131,6 +138,7 @@ extern struct send_entry* populate_entry(struct send_entry *entry, struct timesp
 extern void time_copy(struct timespec *tdest, struct timespec tsource);
 extern double time_diff(struct timespec tend, struct timespec tstart);
 extern int time_str(char *buf, uint len, struct timespec * ts);
+extern double time_to_double(struct timespec *t);
 
 extern void receiver_at_exit();
 extern void receiver_init();

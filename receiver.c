@@ -35,19 +35,28 @@ volatile long pulseCount = 0;
 volatile short buzzer_enabled = 0;
 volatile int buzzer_pulses = 0, buzzer_cnt = 10;
 timer_t buzzer_timerup, buzzer_timerdown;
-struct buzzer_alarm_tracker tracker[] = { { 0, 0L, 0, 0L }, { 0, 0L, 0, 0L } };
+struct buzzer_power_queue pqueue[] = {
+    { 0, 0 }, { 0, 0 }
+};
+
+struct buzzer_config buzzer_config[] = {
+    { 0, 0, 0},
+    { 0, 0, 0}
+};
+
+
 
 double calc_power(double dt) {
     return (3600000.0 / dt) / cfg.ppkwh;
 }
 
 static void buzzer_timer_handler(int sig, siginfo_t *si, void *uc) {
-//    printf("Caught signal %d BC=%d, BP=%d\n", sig, buzzer_cnt, buzzer_pulses);
+    //    printf("Caught signal %d BC=%d, BP=%d\n", sig, buzzer_cnt, buzzer_pulses);
     if (sig == SIG_UP && buzzer_cnt < buzzer_pulses) {
-//        printf("B1 %d\n", cfg.buzzer_pin);
+        //        printf("B1 %d\n", cfg.buzzer_pin);
         digitalWrite(cfg.buzzer_pin, 1);
     } else if (sig == SIG_DOWN) {
-//        printf("B0 %d\n", cfg.buzzer_pin);
+        //        printf("B0 %d\n", cfg.buzzer_pin);
         digitalWrite(cfg.buzzer_pin, 0);
         ++buzzer_cnt;
         if (buzzer_cnt >= 10) {
@@ -90,47 +99,57 @@ void buzzer_timer_setup(timer_t *buzzer_timer, int sig, void *handler) {
     CHECK(sigprocmask(SIG_UNBLOCK, &mask, NULL) != -1);
 }
 
-static void buzzer_setup() {
+static void buzzer_pqueue_init() {
+    TAILQ_INIT(&pqueue[0]);
+    TAILQ_INIT(&pqueue[1]);
+}
+
+void buzzer_setup() {
     if (cfg.buzzer_pin != -1) {
         buzzer_pulses = 0;
-        tracker[0].power_threshold_kwh = cfg.power_soft_threshold / (1000.0 * 3600.0);
-        tracker[0].time_threshold_sec = cfg.power_soft_threshold_time;
-        tracker[1].power_threshold_kwh = cfg.power_hard_threshold / (1000.0 * 3600.0);
-        tracker[1].time_threshold_sec = cfg.power_hard_threshold_time;
+        buzzer_pqueue_init();
+        buzzer_config[0].power_threshold_kwh = cfg.power_soft_threshold / 3.6e6;
+        buzzer_config[0].time_threshold_sec = cfg.power_soft_threshold_time;
+        buzzer_config[0].pulses_init = 1;
+        buzzer_config[1].power_threshold_kwh = cfg.power_hard_threshold / 3.6e6;
+        buzzer_config[1].time_threshold_sec = cfg.power_hard_threshold_time;
+        buzzer_config[1].pulses_init = 4;
         buzzer_timer_setup(&buzzer_timerup, SIG_UP, buzzer_timer_handler);
         buzzer_timer_setup(&buzzer_timerdown, SIG_DOWN, buzzer_timer_handler);
     }
 }
 
-void buzzer_alarm_tracker_update(struct buzzer_alarm_tracker *t, double elapsedkWh, struct timespec *time) {
-    double tnow = 0.0 + time->tv_sec + time->tv_nsec / 1.0e9;
-    if (t->power_acc_kwh == 0 || t->time_sec == 0) {
-        t->power_acc_kwh = elapsedkWh;
-        t->time_sec = tnow;
-    } else {
-        double de = 0.0 + t->power_threshold_kwh * (tnow - t->time_sec) + t->power_acc_kwh - elapsedkWh;
-        if (de > 0) {
-            if (t->power_acc_kwh + de < elapsedkWh) {
-                // saved power state is still relevant for threshold calculation
-                t->time_sec = tnow - (elapsedkWh - t->power_acc_kwh) / t->power_threshold_kwh;
-                t->power_acc_kwh = t->power_acc_kwh + de;
-            } else {
-                // saved power state is irrelevant for threshold calculation
-                t->time_sec = tnow;
-                t->power_acc_kwh = elapsedkWh;
-            }
-        }
-//        L(LOG_DEBUG, "thr=%f, t->p=%f, p=%f, t=%f, t->t=%f, de=%f", t->power_threshold_kwh, elapsedkWh, t->power_acc_kwh, tnow, t->time_sec, de);
+void buzzer_pqueue_push(struct buzzer_power_queue *q, double elapsedkWh, double time) {
+    struct buzzer_power_entry *n = malloc(sizeof(struct buzzer_power_entry));
+    n->power_acc_kwh = elapsedkWh;
+    n->time_sec = time;
+    TAILQ_INSERT_TAIL(q, n, entries);
+}
+
+void buzzer_pqueue_pop(struct buzzer_power_queue *q, double time_interval, double tnow) {
+    while (q->tqh_first != NULL && q->tqh_first->time_sec + time_interval < tnow) {
+        struct buzzer_power_entry *n = q->tqh_first;
+        TAILQ_REMOVE(q, n, entries);
+        free(n);
     }
 }
 
-int calc_buzzer_pulses(double power, double elapsedkWh) {
-    int hs_limit = power >= cfg.power_hard_threshold;
-    struct buzzer_alarm_tracker *t = &tracker[hs_limit];
-    double dt_sec = 0.0 + tnow.tv_sec + tnow.tv_nsec / 1.0e9 - t->time_sec;
-    float m = (0.0 + dt_sec) / t->time_threshold_sec;
-    int buzzer_pulses = (hs_limit ? 4 : 1) + (3.0 * m);
-    L(LOG_DEBUG, "power usage warning %d, hard=%d, dt=%f, dt_max=%ld", buzzer_pulses, hs_limit, dt_sec, t->time_threshold_sec);
+double buzzer_pqueue_delta(struct buzzer_power_queue *q, double power_threshold_kwh, double time_threshold_sec) {
+    struct buzzer_power_entry *h = TAILQ_FIRST(q);
+    struct buzzer_power_entry *t = TAILQ_LAST(q, buzzer_power_queue);
+    if (h != NULL) {
+        double de = t->power_acc_kwh - h->power_acc_kwh;
+//        double dt = t->time_sec - h->time_sec;
+//        L(LOG_DEBUG, "de=%f, dt=%f, me=%f", de, dt, power_threshold_kwh * time_threshold_sec);        
+        return de / (power_threshold_kwh * time_threshold_sec);
+    }
+    return 0;
+}
+
+int buzzer_calc_pulses(struct buzzer_power_queue *q, struct buzzer_config *bc) {
+    double p = buzzer_pqueue_delta(q, bc->power_threshold_kwh, bc->time_threshold_sec);
+    int buzzer_pulses = bc->pulses_init + (3.0 * p);
+    L(LOG_DEBUG, "power usage warning %d, pulses=%d, p=%f", buzzer_pulses, bc->pulses_init, p);
     return buzzer_pulses;
 }
 
@@ -139,14 +158,19 @@ static void buzzer_control(double power, double elapsedkWh) {
         return;
     // data for hard and soft power limits
     int hs_limit = power >= cfg.power_hard_threshold;
-    struct buzzer_alarm_tracker *t = &tracker[hs_limit];
-    buzzer_alarm_tracker_update(t, elapsedkWh, &tnow);
+    struct buzzer_config *bc = &buzzer_config[hs_limit];
+    struct buzzer_power_queue *q = &pqueue[hs_limit];
+    double time = time_to_double(&tnow);
+    buzzer_pqueue_pop(&pqueue[0], buzzer_config[0].time_threshold_sec, time);
+    buzzer_pqueue_pop(&pqueue[1], buzzer_config[1].time_threshold_sec, time);
+    buzzer_pqueue_push(&pqueue[0], elapsedkWh, time);
+    buzzer_pqueue_push(&pqueue[1], elapsedkWh, time);
     if (power >= cfg.power_soft_threshold || power >= cfg.power_hard_threshold) {
         if (!buzzer_enabled) {
             // buzzer config
             buzzer_enabled = 1;
             buzzer_cnt = 0;
-            buzzer_pulses = calc_buzzer_pulses(power, elapsedkWh);
+            buzzer_pulses = buzzer_calc_pulses(q, bc);
             long q = 70;
             struct itimerspec its_up;
             its_up.it_value.tv_sec = 0L;
@@ -255,7 +279,7 @@ void receiver_init() {
         L(LOG_WARNING, "Unable to setup ISR: %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    
+
     data_store_load();
 }
 
