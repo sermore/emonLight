@@ -28,6 +28,9 @@
 #define SIG_UP SIGRTMIN
 #define SIG_DOWN (SIGRTMIN+1)
 
+FILE *data_log_file = NULL;
+struct pulse_queue receive_queue;
+sig_atomic_t receive_queue_sem = 0;
 volatile long rawCount = 0;
 struct timespec tlast = {0L, 0L};
 struct timespec tnow = {0L, 0L};
@@ -45,6 +48,25 @@ struct buzzer_config buzzer_config[] = {
 };
 
 
+static void data_log_open() {
+    if (cfg.data_log != NULL) {
+        data_log_file = open_file(cfg.data_log, "a+");
+        L(LOG_DEBUG, "log data to %s", cfg.data_log);
+    }
+}
+
+static void data_log_write(struct pulse_entry *p) {
+    if (data_log_file != NULL) {
+        fprintf(data_log_file, "%ld,%ld,%f,%f,%ld,%ld\n", p->trec.tv_sec, p->trec.tv_nsec, p->power, p->elapsedkWh, p->pulseCount, p->rawCount);
+    }
+}
+
+static void data_log_close() {
+    if (data_log_file != NULL) {
+        fclose(data_log_file);
+        L(LOG_DEBUG, "close log file %s", cfg.data_log);
+    }
+}
 
 double calc_power(double dt) {
     return (3600000.0 / dt) / cfg.ppkwh;
@@ -200,7 +222,6 @@ static void buzzer_test() {
 
 static void pulse_interrupt(void) {
     double power = 0, elapsedkWh = 0;
-    struct send_entry entry;
     char timestr[31];
 
     if (clock_gettime(CLOCK_REALTIME, &tnow)) {
@@ -214,12 +235,16 @@ static void pulse_interrupt(void) {
         ++pulseCount;
         //Calculate power
         if (pulseCount > 1 && dt < DT_MAX) {
+            receive_queue_sem = 1;
             power = calc_power(dt);
             // calculate kwh elapsed
             elapsedkWh = 1.0 * pulseCount / cfg.ppkwh; //multiply by 1000 to pulses per wh to kwh convert wh to kwh
-            populate_entry(&entry, tlast, tnow, dt, power, elapsedkWh, pulseCount, rawCount);
-            buzzer_control(power, elapsedkWh);
-            CHECK(0 <= mq_send(mq, (char*) &entry, sizeof (struct send_entry), 0));
+            struct pulse_entry *entry = malloc(sizeof(struct pulse_entry));
+            populate_entry(entry, tlast, tnow, dt, power, elapsedkWh, pulseCount, rawCount);
+            TAILQ_INSERT_TAIL(&receive_queue, entry, entries);
+            receive_queue_sem = 0;
+            buzzer_control(power, elapsedkWh);            
+            data_log_write(entry);
         }
         time_str(timestr, 31, &tnow);
         L(LOG_DEBUG, "receive %s: DT=%f, P=%ld(%ld), Power=%f, Elapsed kWh=%f", timestr, dt, pulseCount, rawCount, power, elapsedkWh);
@@ -253,6 +278,8 @@ static void data_store_save() {
 
 void receiver_init() {
     L(LOG_DEBUG, "running as receiver");
+    data_log_open();
+    TAILQ_INIT(&receive_queue);
 
     // sets up the wiringPi library
     //    if (wiringPiSetupGpio() < 0) {
@@ -284,6 +311,7 @@ void receiver_init() {
 }
 
 void receiver_at_exit() {
+    data_log_close();
     data_store_save();
     if (cfg.buzzer_pin != -1) {
         digitalWrite(cfg.buzzer_pin, 0);

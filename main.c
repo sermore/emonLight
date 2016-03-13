@@ -24,6 +24,7 @@
 #include <getopt.h>
 #include <pwd.h>
 #include <sys/types.h>
+#include <fcntl.h>
 
 #define YN(v) (v == 1 ? "YES" : "NO")
 
@@ -50,7 +51,6 @@ struct cfg_t cfg = {
     .homedir = NULL
 };
 
-mqd_t mq = -1;
 int pidFilehandle = -1;
 volatile int stop;
 
@@ -480,37 +480,6 @@ void help() {
     exit(EXIT_FAILURE);
 }
 
-mqd_t queue_open(int oflag) {
-    struct mq_attr attr;
-    mqd_t mq;
-
-    /* initialize the queue attributes */
-    attr.mq_flags = 0;
-    attr.mq_maxmsg = cfg.queue_size;
-    attr.mq_msgsize = sizeof (struct send_entry);
-    attr.mq_curmsgs = 0;
-
-    /* create the message queue */
-    mq = mq_open(QUEUE_NAME, oflag, 0644, &attr);
-    CHECK((mqd_t) - 1 != mq);
-    CHECK(-1 != mq_getattr(mq, &attr));
-    L(LOG_DEBUG, "pulses in queue at startup %ld, queue length %ld, msg size %ld", attr.mq_curmsgs, attr.mq_maxmsg, attr.mq_msgsize);
-
-    return mq;
-}
-
-static void queue_cleanup(mqd_t mq) {
-    struct mq_attr attr;
-    /* cleanup */
-    CHECK(-1 != mq_getattr(mq, &attr));
-    CHECK((mqd_t) - 1 != mq_close(mq));
-    if (cfg.unlink_queue && attr.mq_curmsgs == 0) {
-        CHECK((mqd_t) - 1 != mq_unlink(QUEUE_NAME));
-        L(LOG_DEBUG, "queue unlinked");
-    }
-    L(LOG_DEBUG, "exit, messages in queue %ld", attr.mq_curmsgs);
-}
-
 double time_diff(struct timespec tend, struct timespec tstart) {
     double dt = 0.0 + (tend.tv_sec - tstart.tv_sec) + (tend.tv_nsec - tstart.tv_nsec) / 1.0e9;
     return dt;
@@ -547,7 +516,7 @@ double time_to_double(struct timespec *t) {
     return 0.0 + t->tv_sec + t->tv_nsec / 1.0e9;
 }
 
-struct send_entry* populate_entry(struct send_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount) {
+struct pulse_entry* populate_entry(struct pulse_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount) {
     time_copy(&entry->tlast, tlast);
     time_copy(&entry->trec, trec);
     entry->dt = dt;
@@ -633,10 +602,6 @@ static void at_exit(void) {
         receiver_at_exit();
     }
 
-    if (mq != -1) {
-        queue_cleanup(mq);
-    }
-
     // close and remove pidfile in case of daemon
     if (pidFilehandle != -1) {
         close(pidFilehandle);
@@ -680,9 +645,6 @@ int main(int argc, char **argv) {
 
     if (cfg.config != NULL)
         L(LOG_INFO, "read config from %s", cfg.config);
-
-    int oflag = cfg.receiver && !cfg.sender ? O_WRONLY : !cfg.receiver && cfg.sender ? O_RDONLY : O_RDWR;
-    mq = queue_open(oflag | O_CREAT);
 
     if (cfg.receiver) {
         receiver_init();

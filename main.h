@@ -37,14 +37,11 @@ extern "C" {
 #include <signal.h>
 #include <sys/queue.h>
 #include <syslog.h>
-#include <mqueue.h>
 #include <libconfig.h>
 
 
 #define DT_MIN 1.0e-1
 #define DT_MAX 3600
-
-#define QUEUE_NAME  "/emonLight_queue"
 
 #define CHECK(x) \
     do { \
@@ -72,8 +69,8 @@ extern "C" {
 #define EMONCMS_REMOTE_ID 1
 #define EMONLIGHT_REMOTE_ID 2
     
-struct send_entry {
-    TAILQ_ENTRY(send_entry) entries;
+struct pulse_entry {
+    TAILQ_ENTRY(pulse_entry) entries;
     struct timespec tlast;
     struct timespec trec;
     double dt;
@@ -83,7 +80,7 @@ struct send_entry {
     long rawCount;
 };
 
-TAILQ_HEAD(send_queue, send_entry);
+TAILQ_HEAD(pulse_queue, pulse_entry);
 
 struct cfg_t {
     const char *config;
@@ -130,11 +127,12 @@ struct buzzer_power_entry {
 TAILQ_HEAD(buzzer_power_queue, buzzer_power_entry);
 
 extern struct cfg_t cfg;
-extern mqd_t mq;
 extern volatile int stop;
+extern struct pulse_queue receive_queue;
+extern sig_atomic_t receive_queue_sem;
 
 extern FILE* open_file(const char *filepath, const char *mode);
-extern struct send_entry* populate_entry(struct send_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount);
+extern struct pulse_entry* populate_entry(struct pulse_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount);
 extern void time_copy(struct timespec *tdest, struct timespec tsource);
 extern double time_diff(struct timespec tend, struct timespec tstart);
 extern int time_str(char *buf, uint len, struct timespec * ts);
