@@ -35,7 +35,6 @@ extern "C" {
 #include <string.h>
 #include <time.h>
 #include <signal.h>
-#include <sys/queue.h>
 #include <syslog.h>
 #include <libconfig.h>
 
@@ -68,19 +67,6 @@ extern "C" {
 #define EMONLIGHT_REMOTE "emonlight"
 #define EMONCMS_REMOTE_ID 1
 #define EMONLIGHT_REMOTE_ID 2
-    
-struct pulse_entry {
-    TAILQ_ENTRY(pulse_entry) entries;
-    struct timespec tlast;
-    struct timespec trec;
-    double dt;
-    double power;
-    double elapsedkWh;
-    long pulseCount;
-    long rawCount;
-};
-
-TAILQ_HEAD(pulse_queue, pulse_entry);
 
 struct cfg_t {
     const char *config;
@@ -89,10 +75,6 @@ struct cfg_t {
     char* api_key;
     int node_id;
     short daemonize;
-    short receiver;
-    short sender;
-    short unlink_queue;
-    int queue_size;
     short verbose;
     int ppkwh;
     int pulse_pin;
@@ -112,39 +94,14 @@ struct cfg_t {
     short help;
 };
 
-struct buzzer_config {
-    double power_threshold_kwh; // power threshold 
-    long time_threshold_sec; // interval length for which the power excess can be maintained
-    int pulses_init; // initial number of pulses to apply
-};
-
-struct buzzer_power_entry {
-    TAILQ_ENTRY(buzzer_power_entry) entries;
-    double power_acc_kwh;
-    double time_sec;
-};
-
-TAILQ_HEAD(buzzer_power_queue, buzzer_power_entry);
-
 extern struct cfg_t cfg;
 extern volatile int stop;
-extern struct pulse_queue receive_queue;
-extern sig_atomic_t receive_queue_sem;
 
 extern FILE* open_file(const char *filepath, const char *mode);
-extern struct pulse_entry* populate_entry(struct pulse_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount);
 extern void time_copy(struct timespec *tdest, struct timespec tsource);
 extern double time_diff(struct timespec tend, struct timespec tstart);
 extern int time_str(char *buf, uint len, struct timespec * ts);
-extern double time_to_double(struct timespec *t);
-
-extern void receiver_at_exit();
-extern void receiver_init();
-extern void receiver_loop();
-
-extern void sender_at_exit();
-extern void sender_init();
-extern void sender_loop();
+extern double time_to_double(struct timespec t);
 
 #ifdef	__cplusplus
 }

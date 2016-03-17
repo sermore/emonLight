@@ -21,11 +21,14 @@
  * Created on April 12, 2015, 10:21 AM
  */
 #include "main.h"
+#include "sender.h"
+#include "receiver.h"
 #include <getopt.h>
 #include <pwd.h>
 #include <sys/types.h>
 #include <fcntl.h>
 
+#define LOG_NAME "emonlight"
 #define YN(v) (v == 1 ? "YES" : "NO")
 
 struct cfg_t cfg = {
@@ -34,10 +37,6 @@ struct cfg_t cfg = {
     .api_key = NULL,
     .node_id = -1,
     .daemonize = -1,
-    .receiver = 0,
-    .sender = 0,
-    .unlink_queue = -1,
-    .queue_size = 0,
     .verbose = -1,
     .pulse_pin = -1,
     .buzzer_pin = -1,
@@ -82,10 +81,7 @@ void parse_opts(int argc, char **argv) {
         static struct option long_options[] = {
             {"config", required_argument, 0, 'c'},
             {"daemon", no_argument, 0, 'd'},
-            {"receiver", no_argument, 0, 'r'},
-            {"sender", no_argument, 0, 's'},
             {"unlink-queue", no_argument, 0, 'u'},
-            {"queue-size", required_argument, 0, 'q'},
             {"verbose", no_argument, 0, 'v'},
             {"pulse-pin", required_argument, 0, 'p'},
             {"remote", required_argument, 0, 'i'},
@@ -108,30 +104,18 @@ void parse_opts(int argc, char **argv) {
             {0, 0, 0, 0}
         };
 
-        c = getopt_long(argc, argv, "c:drsuq:vp:i:k:ne:l::t:a:w:b:o:y:f:m:x:g:zh", long_options, &option_index);
+        c = getopt_long(argc, argv, "c:dvp:i:k:ne:l::t:a:w:b:o:y:f:m:x:g:zh", long_options, &option_index);
         if (c == -1)
             break;
         switch (c) {
-            case 'u':
-                cfg.unlink_queue = 1;
-                break;
             case 'v':
                 cfg.verbose = 1;
                 break;
             case 'd':
                 cfg.daemonize = 1;
                 break;
-            case 'r':
-                cfg.receiver = 1;
-                break;
-            case 's':
-                cfg.sender = 1;
-                break;
             case 'p':
                 optarg_to_int(&cfg.pulse_pin, argv[optind]);
-                break;
-            case 'q':
-                optarg_to_int(&cfg.queue_size, argv[optind]);
                 break;
             case 'i':
                 if (strcasecmp(EMONLIGHT_REMOTE, optarg) == 0)
@@ -200,16 +184,6 @@ void parse_opts(int argc, char **argv) {
                 exit(3);
         }
     }
-    if (strstr(argv[0], "emonlight-send") != NULL) {
-        cfg.sender = 1;
-        cfg.receiver = 0;
-    } else if (strstr(argv[0], "emonlight-rec") != NULL) {
-        cfg.sender = 0;
-        cfg.receiver = 1;
-    } else if (!cfg.receiver && !cfg.sender) {
-        cfg.receiver = 1;
-        cfg.sender = 1;
-    }
     if (optind < argc) {
         printf("non-option ARGV-elements: ");
         while (optind < argc)
@@ -267,14 +241,6 @@ int read_config(const char *config_file) {
                 cfg.daemonize = 0;
             }
         }
-        if (cfg.queue_size == 0) {
-            if (config_lookup_int(&config, "queue-size", &tmp)) {
-                cfg.queue_size = tmp;
-            } else {
-                cfg.queue_size = 1024;
-                //TODO verification of SO limits
-            }
-        }
         if (cfg.verbose == -1) {
             if (config_lookup_bool(&config, "verbose", &tmp)) {
                 cfg.verbose = tmp;
@@ -289,7 +255,6 @@ int read_config(const char *config_file) {
                 cfg.pid_path = cfg.daemonize ? "/var/run" : "/tmp";
             }
         }
-        if (cfg.sender) {
             if (cfg.remote == 0) {
                 if (config_lookup_string(&config, "remote", &str))
                     cfg.remote = strcasecmp(EMONLIGHT_REMOTE, str) == 0 ? 
@@ -327,8 +292,6 @@ int read_config(const char *config_file) {
                     }
                 }
             }            
-        }
-        if (cfg.receiver) {
             if (cfg.pulse_pin == -1) {
                 if (config_lookup_int(&config, "pulse-pin", &tmp))
                     cfg.pulse_pin = tmp;
@@ -339,13 +302,6 @@ int read_config(const char *config_file) {
             if (cfg.buzzer_pin == -1) {
                 if (config_lookup_int(&config, "buzzer-pin", &tmp)) {
                     cfg.buzzer_pin = tmp;
-                }
-            }
-            if (cfg.unlink_queue == -1) {
-                if (config_lookup_bool(&config, "unlink-queue", &tmp)) {
-                    cfg.unlink_queue = tmp;
-                } else {
-                    cfg.unlink_queue = 0;
                 }
             }
             if (cfg.data_store == NULL) {
@@ -411,10 +367,9 @@ int read_config(const char *config_file) {
                     cfg.power_hard_limit = 267;
                 }
             }
-        }
         config_destroy(&config);
     }
-    if (cfg.sender && cfg.api_key == NULL) {
+    if (cfg.api_key == NULL) {
         L(LOG_ERR, "No value found for api-key.");
         return 2;
     }
@@ -426,10 +381,6 @@ void help() {
             "Options:\n"
             "-c, --config=FILE                      read configuration from specified file\n"
             "-d, --daemon                           execute as daemon\n"
-            "-r, --receiver                         act a receiver only, read pulses and queue power information\n"
-            "-s, --sender                           act as sender only, read data from queue and send to data-logger site\n"
-            "-u, --unlink-queue                     unlink queue if empty at program termination\n"
-            "-q, --queue-size=NUMBER                set queue length to NUMBER\n"
             "-v, --verbose                          enable verbose print and log\n"
             "-p, --pulse-pin=NUMBER                 use pin NUMBER as input for reading pulse signal, use GPIO numbering\n"
             "-i, --remote=[EMONCMS|EMONLIGHT]       select remote server to connect to\n"
@@ -451,10 +402,6 @@ void help() {
     printf("Configuration:\n"
             "configuration file %s\n"
             "perform as daemon %s\n"
-            "act as receiver %s\n"
-            "act as sender %s\n"
-            "unlink queue on termination %s\n"
-            "queue size %d\n"
             "verbose mode %s\n"
             "pulse pin %d\n"
             "remote server %s\n"
@@ -470,8 +417,7 @@ void help() {
             "power soft threshold time (seconds) %d\n"
             "power hard threshold %d\n"
             "power hard threshold time (seconds) %d\n",
-            cfg.config, YN(cfg.daemonize), YN(cfg.receiver), YN(cfg.sender), 
-            YN(cfg.unlink_queue), cfg.queue_size, YN(cfg.verbose), 
+            cfg.config, YN(cfg.daemonize), YN(cfg.verbose), 
             cfg.pulse_pin, cfg.remote == EMONLIGHT_REMOTE_ID ? EMONLIGHT_REMOTE : EMONCMS_REMOTE, 
             cfg.api_key, cfg.node_id, cfg.url, cfg.data_log, cfg.pid_path, 
             cfg.data_store, cfg.ppkwh, cfg.buzzer_pin,
@@ -512,21 +458,8 @@ int time_str(char *buf, uint len, struct timespec * ts) {
     return 0;
 }
 
-double time_to_double(struct timespec *t) {
-    return 0.0 + t->tv_sec + t->tv_nsec / 1.0e9;
-}
-
-struct pulse_entry* populate_entry(struct pulse_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount) {
-    time_copy(&entry->tlast, tlast);
-    time_copy(&entry->trec, trec);
-    entry->dt = dt;
-    entry->power = power;
-    entry->elapsedkWh = elapsedkWh;
-    entry->pulseCount = pulseCount;
-    entry->rawCount = rawCount;
-    entry->entries.tqe_next = NULL;
-    entry->entries.tqe_prev = NULL;
-    return entry;
+double time_to_double(struct timespec t) {
+    return 0.0 + t.tv_sec + t.tv_nsec / 1.0e9;
 }
 
 static void sig_handler(int signo) {
@@ -551,12 +484,8 @@ FILE *open_file(const char *filepath, const char *mode) {
     return file;
 }
 
-static const char *log_name() {
-    return (cfg.receiver && cfg.sender) ? "emonlight" : (cfg.receiver ? "emonlight-rec" : "emonlight-send");
-}
-
 static int pidfile(char *str) {
-    return sprintf(str, "%s/%s.pid", cfg.pid_path, log_name());
+    return sprintf(str, "%s/%s.pid", cfg.pid_path, LOG_NAME);
 }
 
 static void daemonize() {
@@ -594,13 +523,8 @@ static void daemonize() {
 
 static void at_exit(void) {
 
-    if (cfg.sender) {
-        sender_at_exit();
-    }
-
-    if (cfg.receiver) {
-        receiver_at_exit();
-    }
+    sender_at_exit();
+    receiver_at_exit();
 
     // close and remove pidfile in case of daemon
     if (pidFilehandle != -1) {
@@ -638,7 +562,7 @@ int main(int argc, char **argv) {
     if (!cfg.verbose) {
         setlogmask(LOG_UPTO(LOG_WARNING));
     }
-    openlog(log_name(), LOG_PID | LOG_CONS, LOG_USER);
+    openlog(LOG_NAME, LOG_PID | LOG_CONS, LOG_USER);
 
     if (cfg.daemonize)
         daemonize();
@@ -646,17 +570,12 @@ int main(int argc, char **argv) {
     if (cfg.config != NULL)
         L(LOG_INFO, "read config from %s", cfg.config);
 
-    if (cfg.receiver) {
-        receiver_init();
-    }
-    if (cfg.sender) {
-        sender_init();
-    }
+    receiver_init();
+    sender_init();
 
     // main loop
     stop = 0;
     do {
-        receiver_loop();
         sender_loop();
     } while (!stop);
     

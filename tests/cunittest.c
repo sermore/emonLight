@@ -21,23 +21,19 @@
  * Created on Apr 16, 2015, 8:08:56 PM
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <mqueue.h>
-#include <sys/queue.h>
-
 #include <CUnit/Basic.h>
 
-#include "../main.h"
+#include "main.h"
+#include "buzzer.h"
+#include "sender.h"
 
 //extern struct cfg_t cfg;
 
-extern struct pulse_queue send_q;
+extern struct send_queue send_q;
 extern int send_queue_length;
 //extern CURL *curl;
 
 //extern volatile int stop;
-//extern mqd_t mq;
 //extern long pulseCount, rawCount;
 //extern struct timespec tstart, tlast;
 extern char send_buf[1024];
@@ -47,13 +43,10 @@ extern struct buzzer_power_queue pqueue[2];
 extern int build_url_emoncms();
 extern int build_url_emonlight();
 extern double calc_power(double dt);
-extern struct pulse_entry *insert_entry(struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount);
-extern mqd_t open_pulse_queue(int oflag);
+extern struct send_entry *insert_entry(struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount);
 extern void parse_opts(int argc, char **argv);
-extern void cleanup_queue(mqd_t mq);
 extern char* get_config_file(const char *config_file);
 extern int read_config(const char *config_file);
-extern void buzzer_setup();
 extern void buzzer_pqueue_push(struct buzzer_power_queue *q, double elapsedkWh, double time);
 extern void buzzer_pqueue_pop(struct buzzer_power_queue *q, double time_interval, double tnow);
 extern double buzzer_pqueue_delta(struct buzzer_power_queue *q, double power_threshold_kwh, double time_threshold_sec);
@@ -76,8 +69,6 @@ int init_config(char * config) {
     cfg.verbose = -1;
     cfg.pulse_pin = -1;
     cfg.node_id = -1;
-    cfg.sender = 1;
-    cfg.receiver = 1;
     cfg.daemonize = 0;
     cfg.config = config;
     send_queue_length = 0;
@@ -93,9 +84,8 @@ void testGET_CONFIG_FILE(void) {
 }
 
 void testPARSE_OPTS(void) {
-    char **argv = (char *[]){"prg", "--queue-size", "1005", "-v", "-p", "32"};
+    char **argv = (char *[]){"prg", "-v", "-p", "32"};
     parse_opts(6, argv);
-    CU_ASSERT(cfg.queue_size == 1005);
     CU_ASSERT(cfg.verbose == 1);
     CU_ASSERT(cfg.pulse_pin == 32);
 }
@@ -104,7 +94,6 @@ void testREAD_CONFIG(void) {
     memset(&cfg, 0, sizeof (cfg));
     CU_ASSERT_PTR_NULL(cfg.config);
     CU_ASSERT_EQUAL(cfg.pulse_pin, 0);
-    CU_ASSERT_EQUAL(cfg.queue_size, 0);
     CU_ASSERT_FALSE(access("tests/emonlight1.conf", F_OK));
     CU_ASSERT_EQUAL(init_config("tests/emonlight1.conf"), 1);
     CU_ASSERT_EQUAL(init_config("XXXX"), 2);
@@ -113,20 +102,19 @@ void testREAD_CONFIG(void) {
     CU_ASSERT_STRING_EQUAL(cfg.url, "http://xx.yy.zz");
     //    printf("P=%d, Q=%d\n", cfg.pin, cfg.queue_size);
     CU_ASSERT_EQUAL(cfg.pulse_pin, 12);
-    CU_ASSERT_EQUAL(cfg.queue_size, 345);
     CU_ASSERT_EQUAL(cfg.node_id, 56);
 }
 
 void testINSERT_ENTRY(void) {
     send_queue_length = 0;
     TAILQ_INIT(&send_q);
-    printf("S=%d\n", sizeof(struct pulse_entry));
-    CU_ASSERT_EQUAL(sizeof(struct pulse_entry), 56);
+//    printf("S=%d\n", sizeof(struct send_entry));
+    CU_ASSERT_EQUAL(sizeof(struct send_entry), 56);
     CU_ASSERT_PTR_NULL(TAILQ_FIRST(&send_q));
     struct timespec t0 = {1234567890, 123456789};
     struct timespec t1 = {1234567900, 123456789};
     insert_entry(t0, t1, 10, calc_power(10), 0.003, 1);
-    struct pulse_entry *e = TAILQ_FIRST(&send_q);
+    struct send_entry *e = TAILQ_FIRST(&send_q);
     CU_ASSERT_PTR_NOT_NULL(e);
     CU_ASSERT_EQUAL(e->tlast.tv_sec, 1234567890);
     CU_ASSERT_EQUAL(e->tlast.tv_nsec, 123456789);
@@ -164,8 +152,8 @@ void testBUILD_URL_EMONCMS(void) {
 
     t0.tv_sec = t1.tv_sec + 1;
     insert_entry(t1, t0, 1, calc_power(1), 0.004, 2);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->tlast.tv_sec, 1234567900);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->trec.tv_sec, 1234567901);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567900);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567901);
     cnt = build_url_emoncms();
     //printf("P=%f, L=%d, QQ=%s\n", calc_power(1), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 2);
@@ -173,8 +161,8 @@ void testBUILD_URL_EMONCMS(void) {
 
     t1.tv_sec = t0.tv_sec + 3;
     insert_entry(t0, t1, 3, calc_power(3), 0.005, 3);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->tlast.tv_sec, 1234567901);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->trec.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567901);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
     cnt = build_url_emoncms();
     //printf("P=%f, L=%d, QQ=%s\n", calc_power(3), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 3);
@@ -183,8 +171,8 @@ void testBUILD_URL_EMONCMS(void) {
     t0.tv_sec = t1.tv_sec;
     t0.tv_nsec += 500000000;
     insert_entry(t1, t0, 0.5, calc_power(0.5), 0.006, 4);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->tlast.tv_sec, 1234567904);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->trec.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
     cnt = build_url_emoncms();
     //printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(0.5), cnt, strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 4);
@@ -194,8 +182,8 @@ void testBUILD_URL_EMONCMS(void) {
     t1.tv_sec++;
     t1.tv_nsec -= 100000000;
     insert_entry(t0, t1, 0.4, calc_power(0.4), 0.007, 5);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->tlast.tv_sec, 1234567904);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->trec.tv_sec, 1234567905);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567905);
     cnt = build_url_emoncms();
     //    printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(0.5), cnt, strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 5);
@@ -217,8 +205,8 @@ void testBUILD_URL_EMONLIGHT(void) {
 
     t0.tv_sec = t1.tv_sec + 1;
     insert_entry(t1, t0, 1, calc_power(1), 0.004, 2);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->tlast.tv_sec, 1234567900);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->trec.tv_sec, 1234567901);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567900);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567901);
     cnt = build_url_emonlight();
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 2);
@@ -226,8 +214,8 @@ void testBUILD_URL_EMONLIGHT(void) {
 
     t1.tv_sec = t0.tv_sec + 3;
     insert_entry(t0, t1, 3, calc_power(3), 0.005, 3);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->tlast.tv_sec, 1234567901);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->trec.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567901);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
     cnt = build_url_emonlight();
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 3);
@@ -236,8 +224,8 @@ void testBUILD_URL_EMONLIGHT(void) {
     t0.tv_sec = t1.tv_sec;
     t0.tv_nsec += 500000000;
     insert_entry(t1, t0, 0.5, calc_power(0.5), 0.006, 4);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->tlast.tv_sec, 1234567904);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->trec.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
     cnt = build_url_emonlight();
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 4);
@@ -247,8 +235,8 @@ void testBUILD_URL_EMONLIGHT(void) {
     t1.tv_sec++;
     t1.tv_nsec -= 100000000;
     insert_entry(t0, t1, 0.4, calc_power(0.4), 0.007, 5);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->tlast.tv_sec, 1234567904);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, pulse_queue)->trec.tv_sec, 1234567905);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567905);
     cnt = build_url_emonlight();
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 5);

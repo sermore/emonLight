@@ -35,6 +35,7 @@ OBJECTDIR=${CND_BUILDDIR}/${CND_CONF}/${CND_PLATFORM}
 
 # Object Files
 OBJECTFILES= \
+	${OBJECTDIR}/buzzer.o \
 	${OBJECTDIR}/main.o \
 	${OBJECTDIR}/receiver.o \
 	${OBJECTDIR}/sender.o
@@ -74,6 +75,11 @@ ${TESTDIR}/TestFiles/f2: ${OBJECTFILES}
 	${MKDIR} -p ${TESTDIR}/TestFiles
 	${LINK.c} -o ${TESTDIR}/TestFiles/f2 ${OBJECTFILES} ${LDLIBSOPTIONS}
 
+${OBJECTDIR}/buzzer.o: buzzer.c 
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.c) -O2 -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/buzzer.o buzzer.c
+
 ${OBJECTDIR}/main.o: main.c 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
@@ -106,6 +112,19 @@ ${TESTDIR}/tests/cunittest.o: tests/cunittest.c
 	${RM} "$@.d"
 	$(COMPILE.c) -O2 -I. -MMD -MP -MF "$@.d" -o ${TESTDIR}/tests/cunittest.o tests/cunittest.c
 
+
+${OBJECTDIR}/buzzer_nomain.o: ${OBJECTDIR}/buzzer.o buzzer.c 
+	${MKDIR} -p ${OBJECTDIR}
+	@NMOUTPUT=`${NM} ${OBJECTDIR}/buzzer.o`; \
+	if (echo "$$NMOUTPUT" | ${GREP} '|main$$') || \
+	   (echo "$$NMOUTPUT" | ${GREP} 'T main$$') || \
+	   (echo "$$NMOUTPUT" | ${GREP} 'T _main$$'); \
+	then  \
+	    ${RM} "$@.d";\
+	    $(COMPILE.c) -O2 -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/buzzer_nomain.o buzzer.c;\
+	else  \
+	    ${CP} ${OBJECTDIR}/buzzer.o ${OBJECTDIR}/buzzer_nomain.o;\
+	fi
 
 ${OBJECTDIR}/main_nomain.o: ${OBJECTDIR}/main.o main.c 
 	${MKDIR} -p ${OBJECTDIR}

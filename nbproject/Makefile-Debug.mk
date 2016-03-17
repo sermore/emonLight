@@ -35,6 +35,7 @@ OBJECTDIR=${CND_BUILDDIR}/${CND_CONF}/${CND_PLATFORM}
 
 # Object Files
 OBJECTFILES= \
+	${OBJECTDIR}/buzzer.o \
 	${OBJECTDIR}/main.o \
 	${OBJECTDIR}/receiver.o \
 	${OBJECTDIR}/sender.o
@@ -74,6 +75,11 @@ ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/emonlight: ${OBJECTFILES}
 	${MKDIR} -p ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}
 	${LINK.c} -o ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/emonlight ${OBJECTFILES} ${LDLIBSOPTIONS} -lrt -lcurl -lwiringPi -lconfig
 
+${OBJECTDIR}/buzzer.o: nbproject/Makefile-${CND_CONF}.mk buzzer.c 
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/buzzer.o buzzer.c
+
 ${OBJECTDIR}/main.o: nbproject/Makefile-${CND_CONF}.mk main.c 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
@@ -106,6 +112,19 @@ ${TESTDIR}/tests/cunittest.o: tests/cunittest.c
 	${RM} "$@.d"
 	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${TESTDIR}/tests/cunittest.o tests/cunittest.c
 
+
+${OBJECTDIR}/buzzer_nomain.o: ${OBJECTDIR}/buzzer.o buzzer.c 
+	${MKDIR} -p ${OBJECTDIR}
+	@NMOUTPUT=`${NM} ${OBJECTDIR}/buzzer.o`; \
+	if (echo "$$NMOUTPUT" | ${GREP} '|main$$') || \
+	   (echo "$$NMOUTPUT" | ${GREP} 'T main$$') || \
+	   (echo "$$NMOUTPUT" | ${GREP} 'T _main$$'); \
+	then  \
+	    ${RM} "$@.d";\
+	    $(COMPILE.c) -g -Wall -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/buzzer_nomain.o buzzer.c;\
+	else  \
+	    ${CP} ${OBJECTDIR}/buzzer.o ${OBJECTDIR}/buzzer_nomain.o;\
+	fi
 
 ${OBJECTDIR}/main_nomain.o: ${OBJECTDIR}/main.o main.c 
 	${MKDIR} -p ${OBJECTDIR}
