@@ -49,6 +49,7 @@ MKDIR=mkdir
 CP=cp
 CCADMIN=CCadmin
 
+GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always --tags)
 
 # build
 build: .build-post

@@ -78,22 +78,22 @@ ${CND_DISTDIR}/${CND_CONF}/${CND_PLATFORM}/emonlight: ${OBJECTFILES}
 ${OBJECTDIR}/buzzer.o: nbproject/Makefile-${CND_CONF}.mk buzzer.c 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
-	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/buzzer.o buzzer.c
+	$(COMPILE.c) -g -Wall -DVERSION=\"${GIT_VERSION}\" -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/buzzer.o buzzer.c
 
 ${OBJECTDIR}/main.o: nbproject/Makefile-${CND_CONF}.mk main.c 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
-	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main.o main.c
+	$(COMPILE.c) -g -Wall -DVERSION=\"${GIT_VERSION}\" -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main.o main.c
 
 ${OBJECTDIR}/receiver.o: nbproject/Makefile-${CND_CONF}.mk receiver.c 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
-	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/receiver.o receiver.c
+	$(COMPILE.c) -g -Wall -DVERSION=\"${GIT_VERSION}\" -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/receiver.o receiver.c
 
 ${OBJECTDIR}/sender.o: nbproject/Makefile-${CND_CONF}.mk sender.c 
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
-	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/sender.o sender.c
+	$(COMPILE.c) -g -Wall -DVERSION=\"${GIT_VERSION}\" -I. -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/sender.o sender.c
 
 # Subprojects
 .build-subprojects:
@@ -110,7 +110,7 @@ ${TESTDIR}/TestFiles/f1: ${TESTDIR}/tests/cunittest.o ${OBJECTFILES:%.o=%_nomain
 ${TESTDIR}/tests/cunittest.o: tests/cunittest.c 
 	${MKDIR} -p ${TESTDIR}/tests
 	${RM} "$@.d"
-	$(COMPILE.c) -g -Wall -I. -MMD -MP -MF "$@.d" -o ${TESTDIR}/tests/cunittest.o tests/cunittest.c
+	$(COMPILE.c) -g -Wall -DVERSION=\"${GIT_VERSION}\" -I. -MMD -MP -MF "$@.d" -o ${TESTDIR}/tests/cunittest.o tests/cunittest.c
 
 
 ${OBJECTDIR}/buzzer_nomain.o: ${OBJECTDIR}/buzzer.o buzzer.c 
@@ -121,7 +121,7 @@ ${OBJECTDIR}/buzzer_nomain.o: ${OBJECTDIR}/buzzer.o buzzer.c
 	   (echo "$$NMOUTPUT" | ${GREP} 'T _main$$'); \
 	then  \
 	    ${RM} "$@.d";\
-	    $(COMPILE.c) -g -Wall -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/buzzer_nomain.o buzzer.c;\
+	    $(COMPILE.c) -g -Wall -DVERSION=\"${GIT_VERSION}\" -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/buzzer_nomain.o buzzer.c;\
 	else  \
 	    ${CP} ${OBJECTDIR}/buzzer.o ${OBJECTDIR}/buzzer_nomain.o;\
 	fi
@@ -134,7 +134,7 @@ ${OBJECTDIR}/main_nomain.o: ${OBJECTDIR}/main.o main.c
 	   (echo "$$NMOUTPUT" | ${GREP} 'T _main$$'); \
 	then  \
 	    ${RM} "$@.d";\
-	    $(COMPILE.c) -g -Wall -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main_nomain.o main.c;\
+	    $(COMPILE.c) -g -Wall -DVERSION=\"${GIT_VERSION}\" -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/main_nomain.o main.c;\
 	else  \
 	    ${CP} ${OBJECTDIR}/main.o ${OBJECTDIR}/main_nomain.o;\
 	fi
@@ -147,7 +147,7 @@ ${OBJECTDIR}/receiver_nomain.o: ${OBJECTDIR}/receiver.o receiver.c
 	   (echo "$$NMOUTPUT" | ${GREP} 'T _main$$'); \
 	then  \
 	    ${RM} "$@.d";\
-	    $(COMPILE.c) -g -Wall -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/receiver_nomain.o receiver.c;\
+	    $(COMPILE.c) -g -Wall -DVERSION=\"${GIT_VERSION}\" -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/receiver_nomain.o receiver.c;\
 	else  \
 	    ${CP} ${OBJECTDIR}/receiver.o ${OBJECTDIR}/receiver_nomain.o;\
 	fi
@@ -160,7 +160,7 @@ ${OBJECTDIR}/sender_nomain.o: ${OBJECTDIR}/sender.o sender.c
 	   (echo "$$NMOUTPUT" | ${GREP} 'T _main$$'); \
 	then  \
 	    ${RM} "$@.d";\
-	    $(COMPILE.c) -g -Wall -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/sender_nomain.o sender.c;\
+	    $(COMPILE.c) -g -Wall -DVERSION=\"${GIT_VERSION}\" -I. -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/sender_nomain.o sender.c;\
 	else  \
 	    ${CP} ${OBJECTDIR}/sender.o ${OBJECTDIR}/sender_nomain.o;\
 	fi

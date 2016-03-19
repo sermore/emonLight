@@ -381,7 +381,8 @@ void help() {
             "-z, --buzzer-test                      test buzzer and exit\n"
             "-h, --help                             this\n"
             );
-    printf("Configuration:\n"
+    printf("\nVersion:%s\n"
+            "Configuration:\n"
             "configuration file %s\n"
             "perform as daemon %s\n"
             "verbose mode %s\n"
@@ -399,6 +400,7 @@ void help() {
             "power soft threshold time (seconds) %d\n"
             "power hard threshold %d\n"
             "power hard threshold time (seconds) %d\n",
+            VERSION,
             cfg.config, YN(cfg.daemonize), YN(cfg.verbose), 
             cfg.pulse_pin, cfg.remote == EMONLIGHT_REMOTE_ID ? EMONLIGHT_REMOTE : EMONCMS_REMOTE, 
             cfg.api_key, cfg.node_id, cfg.url, cfg.data_log, cfg.pid_path, 

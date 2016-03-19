@@ -46,9 +46,10 @@
   </logicalFolder>
   <projectmakefile>Makefile</projectmakefile>
   <confs>
-    <conf name="Debug" type="1">
+    <conf name="Debug" type="1" platformSpecific="true">
       <toolsSet>
         <compilerSet>GNU|GNU</compilerSet>
+        <platform>2</platform>
         <dependencyChecking>true</dependencyChecking>
         <rebuildPropChanged>true</rebuildPropChanged>
       </toolsSet>
@@ -57,6 +58,9 @@
           <incDir>
             <pElem>.</pElem>
           </incDir>
+          <preprocessorList>
+            <Elem>VERSION="${GIT_VERSION}"</Elem>
+          </preprocessorList>
           <warningLevel>2</warningLevel>
         </cTool>
         <ccTool>
