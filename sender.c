@@ -111,7 +111,7 @@ static void data_log_open() {
 
 static void data_log_write(struct send_entry *p) {
     if (data_log_file != NULL) {
-        fprintf(data_log_file, "%ld,%ld,%f,%f,%ld,%ld\n", p->trec.tv_sec, p->trec.tv_nsec, p->power, p->elapsedkWh, p->pulseCount, p->rawCount);
+        fprintf(data_log_file, "%ld;%ld;%f\n", p->trec.tv_sec, p->trec.tv_nsec, p->power);
     }
 }
 
