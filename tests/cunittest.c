@@ -85,7 +85,7 @@ void testGET_CONFIG_FILE(void) {
 
 void testPARSE_OPTS(void) {
     char **argv = (char *[]){"prg", "-v", "-p", "32"};
-    parse_opts(6, argv);
+    parse_opts(4, argv);
     CU_ASSERT(cfg.verbose == 1);
     CU_ASSERT(cfg.pulse_pin == 32);
 }
@@ -252,7 +252,7 @@ void testBUZZER_CALC_PULSES(void) {
     CU_ASSERT_EQUAL(cfg.power_hard_threshold, 4000);
     CU_ASSERT_EQUAL(cfg.power_soft_threshold_time, 3600*3);
     CU_ASSERT_EQUAL(cfg.power_hard_threshold_time, 240);
-    buzzer_setup();
+    buzzer_init();
     CU_ASSERT_EQUAL(buzzer_config[0].power_threshold_kwh, cfg.power_soft_threshold / 3.6e6);
     CU_ASSERT_EQUAL(buzzer_config[0].time_threshold_sec, cfg.power_soft_threshold_time);
     CU_ASSERT_EQUAL(buzzer_config[0].pulses_init, 1);

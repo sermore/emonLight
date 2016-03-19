@@ -45,7 +45,7 @@ struct buzzer_power_entry {
 
 TAILQ_HEAD(buzzer_power_queue, buzzer_power_entry);
 
-extern void buzzer_setup();
+extern void buzzer_init();
 extern void buzzer_at_exit();
 extern void buzzer_control(double power, double elapsedkWh, struct timespec tnow);
 extern void buzzer_test();

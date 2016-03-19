@@ -5,8 +5,8 @@ Features:
 * Power usage levels are read from an standard energy meter with pulse output;
 * Power usage is collected and sent to [emoncms.org](http://emoncms.org); 
 * Able to drive a buzzer for signaling high-level usage with configurable soft and hard thresholds;
-  * soft threshold: 1 to 3 intermittent beeps signal depending on proximity to time limit; default for soft limit is set to 3300Wh with a time limit of 3 hours;
-  * hard threshold: 4 to 6 intermittent beeps signal depending on proximity to time limit; default for hard limit is set to 4000Wh with a time limit of 4 minutes;
+  * soft threshold: 1 to 3 intermittent beeps signal depending on proximity to time limit; default for soft limit is set to 3300 Wh with a time limit of 3 hours;
+  * hard threshold: 4 to 6 intermittent beeps signal depending on proximity to time limit; default for hard limit is set to 4000 Wh with a time limit of 4 minutes;
 
 
 ## Hardware
@@ -61,7 +61,7 @@ Buzzer can be directly connected to GPIO pins.
 <tr><td> PIN + </td><td> GPIO PIN </td></tr>
 </table>
 
-There is no default for buzzer pin, therefore you have to explicity configure it in order to enable buzzer functionality.
+Default pin for buzzer is GPIO 3T.
 
 
 ## Software
@@ -131,17 +131,10 @@ Configuration of GPIO pins must be performed before first program execution.
 	gpio edge 17 falling
 	# configure output pin for buzzer control 
 	gpio -g mode 3 out
+        #export above configuration in order to be handled by program without privileges
+        gpio export 3 out
 	# set to zero level buzzer pin
 	gpio -g write 3 0
-	#export above configuration in order to be handled by program without privileges
-	gpio exports
-
-
-#### queue configuration
-Setup is needed for a queue, a value of 2048 is a pretty good default
-
-	sudo echo 2048 > /proc/sys/fs/mqueue/msg_max
-
 
 ### configuration file 
 
@@ -152,26 +145,18 @@ Setup is needed for a queue, a value of 2048 is a pretty good default
     pulse-pin = 17
     # gpio pin to drive buzzer
     buzzer-pin = 3
-    # set queue size; probably the queue size limit must be changed from here /proc/sys/fs/mqueue/msg_max
-    queue-size = 1024
     # enable verbose mode
     verbose = true
-    # remove queue at program termination if queue is empty
-    unlink-queue = true
     # number of pulses equivalent to 1 kWh
     pulses-per-kilowatt-hour = 1000
 
     # power thresholds
     power-soft-threshold = 3300
-    # 3 hours
+    # 3 hours time limit for soft threshold
     power-soft-threshold-time = 10800 
-    # Watt/h cap limit for above time interval, when power is between soft and hard thresholds 
-    power-soft-limit = 4000
     power-hard-threshold = 4000
-    # 4 minutes
+    # 4 minutes time limit for hard threshold
     power-hard-threshold-time = 240 
-    # Watt/h cap limit for above time interval, when power is above hard threshold
-    power-hard-limit = 267
 
     # url to access emoncms site
     emocms-url = "http://emoncms.org";

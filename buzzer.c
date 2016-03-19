@@ -97,7 +97,7 @@ static void buzzer_pqueue_init() {
     TAILQ_INIT(&pqueue[1]);
 }
 
-void buzzer_setup() {
+void buzzer_init() {
     if (cfg.buzzer_pin != -1) {
         buzzer_pulses = 0;
         buzzer_pqueue_init();
@@ -190,12 +190,13 @@ void buzzer_control(double power, double elapsedkWh, struct timespec tnow) {
 }
 
 void buzzer_test() {
-    struct timespec tnow;
-    clock_gettime(CLOCK_REALTIME, &tnow);
-    buzzer_control(cfg.power_soft_threshold, 0.7 * cfg.power_soft_limit / 1000, tnow);
     int i;
-    for (i = 0; i < 10; i++) {
-        sleep(1);
+    L(LOG_DEBUG, "test buzzer pin %d\n", cfg.buzzer_pin);
+    for (i = 0; i < 2; i++) {
+        digitalWrite(cfg.buzzer_pin, 1);
+        usleep(140e3);
+        digitalWrite(cfg.buzzer_pin, 0);
+        usleep(2e5);
     }
+    digitalWrite(cfg.buzzer_pin, 0);
 }
-

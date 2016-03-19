@@ -2,12 +2,7 @@
 if [ ! -d "/var/lib/emonlight" ]; then
     mkdir "/var/lib/emonlight"
 fi
-MSG_MAX=$(cat /proc/sys/fs/mqueue/msg_max)
-if [ $MSG_MAX -lt 2048 ]; then
-    echo 2048 > /proc/sys/fs/mqueue/msg_max
-fi
-MSG_MAX=$(cat /proc/sys/fs/mqueue/msg_max)
-DEFAULT_ARGS="-q $MSG_MAX --data-log"
+DEFAULT_ARGS="--data-log"
 
 # configure input pin for reading pulse signal
 gpio -g mode 17 in

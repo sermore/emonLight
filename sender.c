@@ -276,11 +276,6 @@ void sender_init() {
     TAILQ_INIT(&send_q);
     data_log_open();
     curl = curl_easy_init();    
-    buzzer_setup();
-    if (cfg.buzzer_test) {
-        buzzer_test();
-        exit(EXIT_FAILURE);
-    }
     data_store_load();    
 }
 

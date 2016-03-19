@@ -23,6 +23,7 @@
 #include "main.h"
 #include "sender.h"
 #include "receiver.h"
+#include "buzzer.h"
 #include <getopt.h>
 #include <pwd.h>
 #include <sys/types.h>
@@ -41,6 +42,9 @@ struct cfg_t cfg = {
     .pulse_pin = -1,
     .buzzer_pin = -1,
     .power_soft_threshold = 0,
+    .power_soft_threshold_time = 0,
+    .power_hard_threshold = 0,
+    .power_hard_threshold_time = 0,
     .buzzer_test = 0,
     .ppkwh = 0,
     .data_log = NULL,
@@ -95,16 +99,14 @@ void parse_opts(int argc, char **argv) {
             {"buzzer-pin", required_argument, 0, 'b'},
             {"power-soft-threshold", required_argument, 0, 'o'},
             {"power-soft-threshold-time", required_argument, 0, 'y'},
-            {"power-soft-limit", required_argument, 0, 'f'},
             {"power-hard-threshold", required_argument, 0, 'm'},
             {"power-hard-threshold-time", required_argument, 0, 'x'},
-            {"power-hard-limit", required_argument, 0, 'g'},
             {"buzzer-test", no_argument, 0, 'z'},
             {"help", no_argument, 0, 'h'},
             {0, 0, 0, 0}
         };
 
-        c = getopt_long(argc, argv, "c:dvp:i:k:ne:l::t:a:w:b:o:y:f:m:x:g:zh", long_options, &option_index);
+        c = getopt_long(argc, argv, "c:dvp:i:k:ne:l::t:a:w:b:o:y:m:x:zh", long_options, &option_index);
         if (c == -1)
             break;
         switch (c) {
@@ -157,17 +159,11 @@ void parse_opts(int argc, char **argv) {
             case 'y':
                 optarg_to_int(&cfg.power_soft_threshold_time, argv[optind]);
                 break;
-            case 'f':
-                optarg_to_int(&cfg.power_soft_limit, argv[optind]);
-                break;
             case 'm':
                 optarg_to_int(&cfg.power_hard_threshold, argv[optind]);
                 break;
             case 'x':
                 optarg_to_int(&cfg.power_hard_threshold_time, argv[optind]);
-                break;
-            case 'g':
-                optarg_to_int(&cfg.power_hard_limit, argv[optind]);
                 break;
             case 'z':
                 cfg.buzzer_test = 1;
@@ -339,13 +335,6 @@ int read_config(const char *config_file) {
                     cfg.power_soft_threshold_time = 3600 * 3;
                 }
             }
-            if (cfg.power_soft_limit == 0) {
-                if (config_lookup_int(&config, "power-soft-limit", &tmp)) {
-                    cfg.power_soft_limit = tmp;
-                } else {
-                    cfg.power_soft_limit = 4000;
-                }
-            }
             if (cfg.power_hard_threshold == 0) {
                 if (config_lookup_int(&config, "power-hard-threshold", &tmp)) {
                     cfg.power_hard_threshold = tmp;
@@ -358,13 +347,6 @@ int read_config(const char *config_file) {
                     cfg.power_hard_threshold_time = tmp;
                 } else {
                     cfg.power_hard_threshold_time = 240;
-                }
-            }
-            if (cfg.power_hard_limit == 0) {
-                if (config_lookup_int(&config, "power-hard-limit", &tmp)) {
-                    cfg.power_hard_limit = tmp;
-                } else {
-                    cfg.power_hard_limit = 267;
                 }
             }
         config_destroy(&config);
@@ -572,6 +554,12 @@ int main(int argc, char **argv) {
 
     receiver_init();
     sender_init();
+    buzzer_init();
+    
+    buzzer_test();
+    if (cfg.buzzer_test) {
+        exit(EXIT_FAILURE);
+    }
 
     // main loop
     stop = 0;

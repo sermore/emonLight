@@ -81,10 +81,8 @@ struct cfg_t {
     int buzzer_pin;
     int power_soft_threshold;
     int power_soft_threshold_time;
-    int power_soft_limit;
     int power_hard_threshold;
     int power_hard_threshold_time;
-    int power_hard_limit;
     short buzzer_test;
     char *data_log;
     short data_log_defaults;
