@@ -61,7 +61,7 @@ Buzzer can be directly connected to GPIO pins.
 <tr><td> PIN + </td><td> GPIO PIN </td></tr>
 </table>
 
-Default pin for buzzer is GPIO 3T.
+Default pin for buzzer is GPIO 3.
 
 
 ## Software
