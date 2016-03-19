@@ -30,7 +30,6 @@
 FILE *data_log_file = NULL;
 volatile long rawCount = 0;
 struct timespec tlast = {0L, 0L};
-struct timespec tnow = {0L, 0L};
 volatile long pulseCount = 0;
 
 struct send_queue send_q;
@@ -93,11 +92,11 @@ static void data_store_load() {
 static void data_store_save() {
     if (cfg.data_store != NULL && rawCount > 0) {
         FILE *file = open_file(cfg.data_store, "w");
-        fprintf(file, "%ld\n%ld\n%ld\n", pulseCount, tnow.tv_sec, tnow.tv_nsec);
+        fprintf(file, "%ld\n%ld\n%ld\n", pulseCount, tlast.tv_sec, tlast.tv_nsec);
         fclose(file);
         struct tm t;
         char strd[20];
-        strftime(strd, sizeof (strd), "%F %T", localtime_r(&tnow.tv_sec, &t));
+        strftime(strd, sizeof (strd), "%F %T", localtime_r(&tlast.tv_sec, &t));
         L(LOG_DEBUG, "write last_time=%s, pulse count=%ld to %s", strd, pulseCount, cfg.data_store);
     }
 }
