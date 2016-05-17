@@ -28,13 +28,6 @@
 #include "buzzer.h"
 #include "sender.h"
 
-//extern struct cfg_t cfg;
-
-//extern CURL *curl;
-
-//extern volatile int stop;
-//extern long pulseCount, rawCount;
-//extern struct timespec tstart, tlast;
 extern char send_buf[1024];
 extern struct buzzer_config buzzer_config[2];
 extern struct buzzer_power_queue pqueue[2];
@@ -164,7 +157,7 @@ void testBUILD_URL_EMONCMS(void) {
     int cnt = build_url_emoncms(server);
     //printf("P=%f, L=%d, QQ=%s\n", calc_power(map->source, 10), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 1);
-    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1]]&time=1234567891&apikey=key-1");
+    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?time=1234567891&apikey=key-1&data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1]]");
 
     t0.tv_sec = t1.tv_sec + 1;
     insert_entry(map, t1, t0, 1, calc_power(map->source, 1), 0.004, 2, 2);
@@ -173,7 +166,7 @@ void testBUILD_URL_EMONCMS(void) {
     cnt = build_url_emoncms(server);
     //printf("P=%f, L=%d, QQ=%s\n", calc_power(map->source, 1), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 2);
-    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2]]&time=1234567891&apikey=key-1");
+    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?time=1234567891&apikey=key-1&data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2]]");
 
     t1.tv_sec = t0.tv_sec + 3;
     insert_entry(map, t0, t1, 3, calc_power(map->source, 3), 0.005, 3, 3);
@@ -182,7 +175,7 @@ void testBUILD_URL_EMONCMS(void) {
     cnt = build_url_emoncms(server);
     //printf("P=%f, L=%d, QQ=%s\n", calc_power(map->source, 3), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 3);
-    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2],[11,5,1200.000000,0.005000,3],[13,5,1200.000000,0.005000,3]]&time=1234567891&apikey=key-1");
+    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?time=1234567891&apikey=key-1&data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2],[11,5,1200.000000,0.005000,3],[13,5,1200.000000,0.005000,3]]");
 
     t0.tv_sec = t1.tv_sec;
     t0.tv_nsec += 500000000;
@@ -192,7 +185,7 @@ void testBUILD_URL_EMONCMS(void) {
     cnt = build_url_emoncms(server);
     //printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(map->source, 0.5), cnt, strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 4);
-    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2],[11,5,1200.000000,0.005000,3],[13,5,1200.000000,0.005000,3],[14,5,7200.000000,0.006000,4]]&time=1234567891&apikey=key-1");
+    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?time=1234567891&apikey=key-1&data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2],[11,5,1200.000000,0.005000,3],[13,5,1200.000000,0.005000,3],[14,5,7200.000000,0.006000,4]]");
 
     cfg.verbose = 0;
     t1.tv_sec++;
@@ -203,7 +196,7 @@ void testBUILD_URL_EMONCMS(void) {
     cnt = build_url_emoncms(server);
     //    printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(map->source, 0.5), cnt, strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 5);
-    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2],[11,5,1200.000000,0.005000,3],[13,5,1200.000000,0.005000,3],[14,5,7200.000000,0.006000,4],[14,5,9000.000000,0.007000,5]]&time=1234567891&apikey=key-1");
+    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?time=1234567891&apikey=key-1&data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2],[11,5,1200.000000,0.005000,3],[13,5,1200.000000,0.005000,3],[14,5,7200.000000,0.006000,4],[14,5,9000.000000,0.007000,5]]");
 }
 
 void testBUILD_URL_EMONLIGHT(void) {
@@ -221,7 +214,7 @@ void testBUILD_URL_EMONLIGHT(void) {
     CU_ASSERT_EQUAL(cnt, 1);
     CU_ASSERT_EQUAL(map->queue_length, 1);
     CU_ASSERT_EQUAL(map->queued, 1);
-    CU_ASSERT_STRING_EQUAL(send_buf, "{nodes: [{k:'key-1',id:5,d:[[1234567900,123456789,360.000000]]}]}");
+    CU_ASSERT_STRING_EQUAL(send_buf, "{\"nodes\": [{\"k\":\"key-1\",\"id\":5,\"d\":[[1234567900,123456789,360.000000]]}]}");
 
     map->queued = 0;
     t0.tv_sec = t1.tv_sec + 1;
@@ -233,7 +226,7 @@ void testBUILD_URL_EMONLIGHT(void) {
     CU_ASSERT_EQUAL(cnt, 2);
     CU_ASSERT_EQUAL(map->queue_length, 2);
     CU_ASSERT_EQUAL(map->queued, 2);
-    CU_ASSERT_STRING_EQUAL(send_buf, "{nodes: [{k:'key-1',id:5,d:[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000]]}]}");
+    CU_ASSERT_STRING_EQUAL(send_buf, "{\"nodes\": [{\"k\":\"key-1\",\"id\":5,\"d\":[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000]]}]}");
 
     map->queued = 0;
     t1.tv_sec = t0.tv_sec + 3;
@@ -243,7 +236,7 @@ void testBUILD_URL_EMONLIGHT(void) {
     cnt = build_url_emonlight(server);
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 3);
-    CU_ASSERT_STRING_EQUAL(send_buf, "{nodes: [{k:'key-1',id:5,d:[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000],[1234567904,123456789,1200.000000]]}]}");
+    CU_ASSERT_STRING_EQUAL(send_buf, "{\"nodes\": [{\"k\":\"key-1\",\"id\":5,\"d\":[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000],[1234567904,123456789,1200.000000]]}]}");
 
     map->queued = 0;
     t0.tv_sec = t1.tv_sec;
@@ -254,7 +247,7 @@ void testBUILD_URL_EMONLIGHT(void) {
     cnt = build_url_emonlight(server);
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 4);
-    CU_ASSERT_STRING_EQUAL(send_buf, "{nodes: [{k:'key-1',id:5,d:[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000],[1234567904,123456789,1200.000000],[1234567904,623456789,7200.000000]]}]}");
+    CU_ASSERT_STRING_EQUAL(send_buf, "{\"nodes\": [{\"k\":\"key-1\",\"id\":5,\"d\":[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000],[1234567904,123456789,1200.000000],[1234567904,623456789,7200.000000]]}]}");
 
     cfg.verbose = 0;
     map->queued = 0;
@@ -266,7 +259,7 @@ void testBUILD_URL_EMONLIGHT(void) {
     cnt = build_url_emonlight(server);
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 5);
-    CU_ASSERT_STRING_EQUAL(send_buf, "{nodes: [{k:'key-1',id:5,d:[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000],[1234567904,123456789,1200.000000],[1234567904,623456789,7200.000000],[1234567905,23456789,9000.000000]]}]}");
+    CU_ASSERT_STRING_EQUAL(send_buf, "{\"nodes\": [{\"k\":\"key-1\",\"id\":5,\"d\":[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000],[1234567904,123456789,1200.000000],[1234567904,623456789,7200.000000],[1234567905,23456789,9000.000000]]}]}");
 }
 
 void testBUZZER_CALC_PULSES(void) {
