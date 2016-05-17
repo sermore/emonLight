@@ -5,7 +5,7 @@ Source code is available at [github](https://github.com/sermore/emonlight).
 Features:
 
 * Power usage levels are read from one or more standard energy meters with pulse output
-* Power usage is collected and can be sent to your own server running [http://github.com/sermore/emonlight-web] or to [emonlight.reliqs.net]. Output for [emoncms.org](http://emoncms.org) is supported too.
+* Power usage is collected and can be sent to your own server running [emonlight-web]([http://github.com/sermore/emonlight-web) or to [emonlight demo site](emonlight.reliqs.net). Output for [emoncms.org](http://emoncms.org) is supported too.
 * Multiple sources and multiple servers are supported
 * Able to drive a buzzer for signaling high-level usage with configurable soft and hard thresholds
   * soft threshold: 1 to 3 intermittent beeps signal depending on proximity to time limit; default for soft limit is set to 3300 Wh with a time limit of 3 hours
