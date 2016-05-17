@@ -32,12 +32,6 @@ extern "C" {
 #include <signal.h>
 #include <sys/queue.h>
 
-struct receive_entry {
-    TAILQ_ENTRY(receive_entry) entries;
-    struct timespec time;
-};
-
-TAILQ_HEAD(receive_queue, receive_entry);
 
 extern struct receive_queue rec_queue;
 extern sig_atomic_t receive_queue_sem;

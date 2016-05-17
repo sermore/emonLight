@@ -6,6 +6,7 @@
                    projectFiles="true">
       <itemPath>buzzer.h</itemPath>
       <itemPath>main.h</itemPath>
+      <itemPath>read_config.h</itemPath>
       <itemPath>receiver.h</itemPath>
       <itemPath>sender.h</itemPath>
     </logicalFolder>
@@ -23,6 +24,7 @@
                    projectFiles="true">
       <itemPath>buzzer.c</itemPath>
       <itemPath>main.c</itemPath>
+      <itemPath>read_config.c</itemPath>
       <itemPath>receiver.c</itemPath>
       <itemPath>sender.c</itemPath>
     </logicalFolder>
@@ -94,6 +96,10 @@
       <item path="main.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="main.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="read_config.c" ex="false" tool="0" flavor2="0">
+      </item>
+      <item path="read_config.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="receiver.c" ex="false" tool="0" flavor2="0">
       </item>
@@ -169,6 +175,10 @@
       <item path="main.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="main.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="read_config.c" ex="false" tool="0" flavor2="0">
+      </item>
+      <item path="read_config.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="receiver.c" ex="false" tool="0" flavor2="0">
       </item>

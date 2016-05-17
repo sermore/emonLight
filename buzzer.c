@@ -22,6 +22,7 @@
  */
 
 #include "buzzer.h"
+#include "read_config.h"
 #include "main.h"
 #include <wiringPi.h>
 

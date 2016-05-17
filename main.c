@@ -21,42 +21,19 @@
  * Created on April 12, 2015, 10:21 AM
  */
 #include "main.h"
+#include "read_config.h"
 #include "sender.h"
 #include "receiver.h"
 #include "buzzer.h"
 #include <getopt.h>
-#include <pwd.h>
 #include <sys/types.h>
 #include <fcntl.h>
 
 #define LOG_NAME "emonlight"
 #define YN(v) (v == 1 ? "YES" : "NO")
 
-struct cfg_t cfg = {
-    .config = NULL,
-    .url = NULL,
-    .api_key = NULL,
-    .node_id = -1,
-    .daemonize = -1,
-    .verbose = -1,
-    .pulse_pin = -1,
-    .buzzer_pin = -1,
-    .power_soft_threshold = 0,
-    .power_soft_threshold_time = 0,
-    .power_hard_threshold = 0,
-    .power_hard_threshold_time = 0,
-    .buzzer_test = 0,
-    .ppkwh = 0,
-    .data_log = NULL,
-    .data_log_defaults = 0,
-    .pid_path = NULL,
-    .data_store = NULL,
-    .homedir = NULL
-};
-
 int pidFilehandle = -1;
 volatile int stop;
-
 
 static void optarg_to_int(int *conf, char *option) {
     char *endptr;
@@ -85,28 +62,16 @@ void parse_opts(int argc, char **argv) {
         static struct option long_options[] = {
             {"config", required_argument, 0, 'c'},
             {"daemon", no_argument, 0, 'd'},
-            {"unlink-queue", no_argument, 0, 'u'},
             {"verbose", no_argument, 0, 'v'},
-            {"pulse-pin", required_argument, 0, 'p'},
-            {"remote", required_argument, 0, 'i'},
-            {"api-key", required_argument, 0, 'k'},
-            {"node-id", required_argument, 0, 'n'},
-            {"url", required_argument, 0, 'e'},
             {"data-log", optional_argument, 0, 'l'},
             {"pid-path", required_argument, 0, 't'},
             {"data-store", required_argument, 0, 'a'},
-            {"pulses-per-kilowatt-hour", required_argument, 0, 'w'},
-            {"buzzer-pin", required_argument, 0, 'b'},
-            {"power-soft-threshold", required_argument, 0, 'o'},
-            {"power-soft-threshold-time", required_argument, 0, 'y'},
-            {"power-hard-threshold", required_argument, 0, 'm'},
-            {"power-hard-threshold-time", required_argument, 0, 'x'},
             {"buzzer-test", no_argument, 0, 'z'},
             {"help", no_argument, 0, 'h'},
             {0, 0, 0, 0}
         };
 
-        c = getopt_long(argc, argv, "c:dvp:i:k:ne:l::t:a:w:b:o:y:m:x:zh", long_options, &option_index);
+        c = getopt_long(argc, argv, "c:dvl::t:a:zh", long_options, &option_index);
         if (c == -1)
             break;
         switch (c) {
@@ -116,26 +81,8 @@ void parse_opts(int argc, char **argv) {
             case 'd':
                 cfg.daemonize = 1;
                 break;
-            case 'p':
-                optarg_to_int(&cfg.pulse_pin, argv[optind]);
-                break;
-            case 'i':
-                if (strcasecmp(EMONLIGHT_REMOTE, optarg) == 0)
-                    cfg.remote = EMONLIGHT_REMOTE_ID;
-                else if (strcasecmp(EMONCMS_REMOTE, optarg) == 0)
-                    cfg.remote = EMONCMS_REMOTE_ID;
-                break;
-            case 'k':
-                cfg.api_key = optarg;
-                break;
             case 'c':
                 cfg.config = optarg;
-                break;
-            case 'e':
-                cfg.url = optarg;
-                break;
-            case 'n':
-                optarg_to_int(&cfg.node_id, argv[optind]);
                 break;
             case 'l':
                 cfg.data_log_defaults = optarg == NULL;
@@ -146,24 +93,6 @@ void parse_opts(int argc, char **argv) {
                 break;
             case 'a':
                 cfg.data_store = optarg;
-                break;
-            case 'w':
-                optarg_to_int(&cfg.ppkwh, argv[optind]);
-                break;
-            case 'b':
-                optarg_to_int(&cfg.buzzer_pin, argv[optind]);
-                break;
-            case 'o':
-                optarg_to_int(&cfg.power_soft_threshold, argv[optind]);
-                break;
-            case 'y':
-                optarg_to_int(&cfg.power_soft_threshold_time, argv[optind]);
-                break;
-            case 'm':
-                optarg_to_int(&cfg.power_hard_threshold, argv[optind]);
-                break;
-            case 'x':
-                optarg_to_int(&cfg.power_hard_threshold_time, argv[optind]);
                 break;
             case 'z':
                 cfg.buzzer_test = 1;
@@ -188,196 +117,16 @@ void parse_opts(int argc, char **argv) {
     }
 }
 
-static const char *get_homedir() {
-    if (cfg.homedir == NULL) {
-        if ((cfg.homedir = getenv("HOME")) == NULL) {
-            cfg.homedir = getpwuid(getuid())->pw_dir;
-        }
-    }
-    return cfg.homedir;
-}
-
-const char* get_config_file(const char *config_file) {
-    const char *dest_file;
-    if (config_file == NULL) {
-        if (cfg.daemonize == 1) {
-            dest_file = "/etc/emonlight.conf";
-        } else {
-            char buf[2048];
-            strcpy(buf, get_homedir());
-            strcat(buf, "/.emonlight");
-            // FIXME test for string length
-            dest_file = strdup(buf);
-        }
-    } else {
-        dest_file = config_file;
-    }
-    return dest_file;
-}
-
-int read_config(const char *config_file) {
-    config_t config;
-    const char *str;
-    int tmp;
-
-    cfg.config = get_config_file(config_file);
-    if (access(cfg.config, F_OK) == 0) {
-        /*Initialization */
-        config_init(&config);
-        /* Read the file. If there is an error, report it and exit. */
-        if (!config_read_file(&config, cfg.config)) {
-            L(LOG_WARNING, "\n%s:%d - %s", config_error_file(&config), config_error_line(&config), config_error_text(&config));
-            config_destroy(&config);
-            return 1;
-        }
-        if (cfg.daemonize == -1) {
-            if (config_lookup_bool(&config, "daemonize", &tmp)) {
-                cfg.daemonize = tmp;
-            } else {
-                cfg.daemonize = 0;
-            }
-        }
-        if (cfg.verbose == -1) {
-            if (config_lookup_bool(&config, "verbose", &tmp)) {
-                cfg.verbose = tmp;
-            } else {
-                cfg.verbose = 0;
-            }
-        }
-        if (cfg.pid_path == NULL) {
-            if (config_lookup_string(&config, "pid-path", &str))
-                cfg.pid_path = strdup(str);
-            else {
-                cfg.pid_path = cfg.daemonize ? "/var/run" : "/tmp";
-            }
-        }
-            if (cfg.remote == 0) {
-                if (config_lookup_string(&config, "remote", &str))
-                    cfg.remote = strcasecmp(EMONLIGHT_REMOTE, str) == 0 ? 
-                        EMONLIGHT_REMOTE_ID : ( strcasecmp(EMONCMS_REMOTE, str) == 0 ? EMONCMS_REMOTE_ID : 0 );                
-            }
-            if (cfg.remote == 0)
-                cfg.remote = EMONCMS_REMOTE_ID;
-            
-            if (cfg.api_key == NULL) {
-                if (config_lookup_string(&config, "api-key", &str))
-                    cfg.api_key = strdup(str);
-            }
-            if (cfg.url == NULL) {
-                if (config_lookup_string(&config, "url", &str))
-                    cfg.url = strdup(str);
-                else {
-                    cfg.url = EMONCMS_URL;
-                }
-            }
-            if (cfg.node_id == -1) {
-                if (config_lookup_int(&config, "node-id", &tmp))
-                    cfg.node_id = tmp;
-            }
-            if (cfg.data_log == NULL) {
-                if (config_lookup_string(&config, "data-log", &str)) {
-                    cfg.data_log = strdup(str);
-                } else if (cfg.data_log_defaults) {
-                    const char *home = get_homedir();
-                    if (cfg.daemonize || home == NULL) {
-                        cfg.data_log = "/var/lib/emonlight/emonlight-data.log";
-                    } else {
-                        cfg.data_log = malloc(strlen(home) + strlen("/emonlight-data.log"));
-                        strcpy(cfg.data_log, home);
-                        strcat(cfg.data_log, "/emonlight-data.log");
-                    }
-                }
-            }            
-            if (cfg.pulse_pin == -1) {
-                if (config_lookup_int(&config, "pulse-pin", &tmp))
-                    cfg.pulse_pin = tmp;
-                else {
-                    cfg.pulse_pin = 17;
-                }
-            }
-            if (cfg.buzzer_pin == -1) {
-                if (config_lookup_int(&config, "buzzer-pin", &tmp)) {
-                    cfg.buzzer_pin = tmp;
-                }
-            }
-            if (cfg.data_store == NULL) {
-                if (config_lookup_string(&config, "data-store", &str)) {
-                    cfg.data_store = strdup(str);
-                } else {
-                    const char *home = get_homedir();
-                    if (cfg.daemonize || home == NULL) {
-                        cfg.data_store = "/var/lib/emonlight/emonlight-data";
-                    } else {
-                        cfg.data_store = malloc(strlen(home) + strlen("/.emonlight-data"));
-                        strcpy(cfg.data_store, home);
-                        strcat(cfg.data_store, "/.emonlight-data");
-                    }
-                }
-            }
-            if (cfg.ppkwh == 0) {
-                if (config_lookup_int(&config, "pulses-per-kilowatt-hour", &tmp)) {
-                    cfg.ppkwh = tmp;
-                } else {
-                    cfg.ppkwh = 1000;
-                }
-            }
-            if (cfg.power_soft_threshold == 0) {
-                if (config_lookup_int(&config, "power-soft-threshold", &tmp)) {
-                    cfg.power_soft_threshold = tmp;
-                } else {
-                    cfg.power_soft_threshold = 3300;
-                }
-            }
-            if (cfg.power_soft_threshold_time == 0) {
-                if (config_lookup_int(&config, "power-soft-threshold-time", &tmp)) {
-                    cfg.power_soft_threshold_time = tmp;
-                } else {
-                    cfg.power_soft_threshold_time = 3600 * 3;
-                }
-            }
-            if (cfg.power_hard_threshold == 0) {
-                if (config_lookup_int(&config, "power-hard-threshold", &tmp)) {
-                    cfg.power_hard_threshold = tmp;
-                } else {
-                    cfg.power_hard_threshold = 4000;
-                }
-            }
-            if (cfg.power_hard_threshold_time == 0) {
-                if (config_lookup_int(&config, "power-hard-threshold-time", &tmp)) {
-                    cfg.power_hard_threshold_time = tmp;
-                } else {
-                    cfg.power_hard_threshold_time = 240;
-                }
-            }
-        config_destroy(&config);
-    }
-    if (cfg.api_key == NULL) {
-        L(LOG_ERR, "No value found for api-key.");
-        return 2;
-    }
-    return 0;
-}
-
 void help() {
     printf("Usage \n"
             "Options:\n"
             "-c, --config=FILE                      read configuration from specified file\n"
             "-d, --daemon                           execute as daemon\n"
             "-v, --verbose                          enable verbose print and log\n"
-            "-p, --pulse-pin=NUMBER                 use pin NUMBER as input for reading pulse signal, use GPIO numbering\n"
-            "-i, --remote=[EMONCMS|EMONLIGHT]       select remote server to connect to\n"
-            "-k --api-key=API_KEY                   use API_KEY for communication to remote server\n"
-            "-n --node-id=NODE_NUMBER               use NODE_NUMBER as node-id for remote server\n"
-            "-e, --url=URL                          use URL to connecto to remote server instance\n"
             "-l, --data-log=FILE                    append to FILE data retrieved\n"
             "-t, --pid-path=PATH                    store pid file in directory PATH\n"
             "-a, --data-store=FILE                  save receiver status on termination\n"
-            "-w, --pulses-per-kilowatt-hour=NUM     calculate power considering NUM pulses for 1 kWh\n"
             "-b, --buzzer-pin=NUMBER                use pin NUMBER as output to drive buzzer\n"
-            "-o, --power-soft-threshold=NUM         use NUM as power soft threshold\n"
-            "-y, --power-soft-threshold-time=NUM    timer limit for power exceeding soft threshold\n"
-            "-m, --power-hard-threshold=NUM         use NUM as power hard threshold\n"
-            "-x, --power-hard-threshold-time=NUM    timer limit for power exceeding soft threshold\n"
             "-z, --buzzer-test                      test buzzer and exit\n"
             "-h, --help                             this\n"
             );
@@ -386,27 +135,24 @@ void help() {
             "configuration file %s\n"
             "perform as daemon %s\n"
             "verbose mode %s\n"
-            "pulse pin %d\n"
-            "remote server %s\n"
-            "api key %s\n"
-            "node id %d\n"
-            "remote server URL %s\n"
             "data log file %s\n"
             "path for pid file %s\n"
             "data store file %s\n"
-            "pulses per kilowatt per hour %d\n"
-            "buzzer output pin %d\n"
+            "buzzer control pin %d\n"
+            "buzzer source pin %d\n"
             "power soft threshold %d\n"
             "power soft threshold time (seconds) %d\n"
             "power hard threshold %d\n"
             "power hard threshold time (seconds) %d\n",
             VERSION,
-            cfg.config, YN(cfg.daemonize), YN(cfg.verbose), 
-            cfg.pulse_pin, cfg.remote == EMONLIGHT_REMOTE_ID ? EMONLIGHT_REMOTE : EMONCMS_REMOTE, 
-            cfg.api_key, cfg.node_id, cfg.url, cfg.data_log, cfg.pid_path, 
-            cfg.data_store, cfg.ppkwh, cfg.buzzer_pin,
+            cfg.config, YN(cfg.daemonize), YN(cfg.verbose),
+            cfg.data_log, cfg.pid_path,
+            cfg.data_store, cfg.buzzer_pin, 
+            cfg.buzzer_source != NULL ? cfg.buzzer_source->pin : 0,
             cfg.power_soft_threshold, cfg.power_soft_threshold_time,
             cfg.power_hard_threshold, cfg.power_hard_threshold_time);
+    print_sources();
+    print_servers();
     exit(EXIT_FAILURE);
 }
 
@@ -557,7 +303,7 @@ int main(int argc, char **argv) {
     receiver_init();
     sender_init();
     buzzer_init();
-    
+
     buzzer_test();
     if (cfg.buzzer_test) {
         exit(EXIT_FAILURE);
@@ -568,6 +314,6 @@ int main(int argc, char **argv) {
     do {
         sender_loop();
     } while (!stop);
-    
+
     return 0;
 }

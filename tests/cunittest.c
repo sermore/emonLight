@@ -24,13 +24,12 @@
 #include <CUnit/Basic.h>
 
 #include "main.h"
+#include "read_config.h"
 #include "buzzer.h"
 #include "sender.h"
 
 //extern struct cfg_t cfg;
 
-extern struct send_queue send_q;
-extern int send_queue_length;
 //extern CURL *curl;
 
 //extern volatile int stop;
@@ -40,10 +39,10 @@ extern char send_buf[1024];
 extern struct buzzer_config buzzer_config[2];
 extern struct buzzer_power_queue pqueue[2];
 
-extern int build_url_emoncms();
-extern int build_url_emonlight();
-extern double calc_power(double dt);
-extern struct send_entry *insert_entry(struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount);
+extern int build_url_emoncms(struct server_entry *server);
+extern int build_url_emonlight(struct server_entry *server);
+extern double calc_power(struct source_entry *source, double dt);
+extern struct send_entry * insert_entry(struct server_mapping_entry *map, struct timespec tlast, struct timespec trec, double dt, double power, double elapsed_kWh, long pulse_count, long raw_count);
 extern void parse_opts(int argc, char **argv);
 extern char* get_config_file(const char *config_file);
 extern int read_config(const char *config_file);
@@ -67,11 +66,8 @@ int clean_suite(void) {
 int init_config(char * config) {
     bzero(&cfg, sizeof (cfg));
     cfg.verbose = -1;
-    cfg.pulse_pin = -1;
-    cfg.node_id = -1;
     cfg.daemonize = 0;
     cfg.config = config;
-    send_queue_length = 0;
     return read_config(cfg.config);
 }
 
@@ -84,47 +80,66 @@ void testGET_CONFIG_FILE(void) {
 }
 
 void testPARSE_OPTS(void) {
-    char **argv = (char *[]){"prg", "-v", "-p", "32"};
+    char **argv = (char *[]){"prg", "-v", "-c", "config_file"};
     parse_opts(4, argv);
     CU_ASSERT(cfg.verbose == 1);
-    CU_ASSERT(cfg.pulse_pin == 32);
+    CU_ASSERT_STRING_EQUAL(cfg.config, "config_file");
 }
 
 void testREAD_CONFIG(void) {
     memset(&cfg, 0, sizeof (cfg));
     CU_ASSERT_PTR_NULL(cfg.config);
-    CU_ASSERT_EQUAL(cfg.pulse_pin, 0);
     CU_ASSERT_FALSE(access("tests/emonlight1.conf", F_OK));
     CU_ASSERT_EQUAL(init_config("tests/emonlight1.conf"), 1);
-    CU_ASSERT_EQUAL(init_config("XXXX"), 2);
+    CU_ASSERT_EQUAL(init_config("XXXX"), 1);
     CU_ASSERT_EQUAL_FATAL(init_config("tests/emonlight.conf"), 0);
-    CU_ASSERT_STRING_EQUAL(cfg.api_key, "1234567890KK");
-    CU_ASSERT_STRING_EQUAL(cfg.url, "http://xx.yy.zz");
+
+    CU_ASSERT_EQUAL(cfg.sources_length, 2);
+    CU_ASSERT_EQUAL(cfg.sources[0].pin, 17);
+    CU_ASSERT_EQUAL(cfg.sources[0].ppkwh, 1000);
+    CU_ASSERT_EQUAL(cfg.sources[0].maps_length, 2);
+    CU_ASSERT_PTR_EQUAL(cfg.sources[0].maps[0], &cfg.servers[0].maps[0]);
+    CU_ASSERT_PTR_EQUAL(cfg.sources[0].maps[1], &cfg.servers[1].maps[0]);    
+    CU_ASSERT_EQUAL(cfg.sources[1].pin, 3);
+    CU_ASSERT_EQUAL(cfg.sources[1].ppkwh, 1200);
+    CU_ASSERT_EQUAL(cfg.sources[1].maps_length, 2);
+    CU_ASSERT_PTR_EQUAL(cfg.sources[1].maps[0], &cfg.servers[0].maps[1]);
+    CU_ASSERT_PTR_EQUAL(cfg.sources[1].maps[1], &cfg.servers[1].maps[1]);    
+
+    CU_ASSERT_EQUAL(cfg.servers_length, 2);
+    CU_ASSERT_STRING_EQUAL(cfg.servers[0].url, "http://emoncms.org")
+    CU_ASSERT_EQUAL(cfg.servers[0].protocol, EMONCMS_REMOTE_ID);
+    CU_ASSERT_EQUAL(cfg.servers[0].maps_length, 2);
+    CU_ASSERT_EQUAL(cfg.servers[0].maps[0].node_id, 5);
+    CU_ASSERT_EQUAL(cfg.servers[0].maps[0].queued, 0);
+    CU_ASSERT_EQUAL(cfg.servers[0].maps[0].queue_length, 0);
+    
     //    printf("P=%d, Q=%d\n", cfg.pin, cfg.queue_size);
-    CU_ASSERT_EQUAL(cfg.pulse_pin, 12);
-    CU_ASSERT_EQUAL(cfg.node_id, 56);
 }
 
 void testINSERT_ENTRY(void) {
-    send_queue_length = 0;
-    TAILQ_INIT(&send_q);
+    struct server_entry *server = cfg.servers;
+    struct server_mapping_entry *map = server->maps;
+    CU_ASSERT_EQUAL(map->queue_length, 0);
+    CU_ASSERT_EQUAL(map->queued, 0);
+    CU_ASSERT_TRUE(TAILQ_EMPTY(&map->queue));
 //    printf("S=%d\n", sizeof(struct send_entry));
     CU_ASSERT_EQUAL(sizeof(struct send_entry), 56);
-    CU_ASSERT_PTR_NULL(TAILQ_FIRST(&send_q));
+    CU_ASSERT_PTR_NULL(TAILQ_FIRST(&map->queue));
     struct timespec t0 = {1234567890, 123456789};
     struct timespec t1 = {1234567900, 123456789};
-    insert_entry(t0, t1, 10, calc_power(10), 0.003, 1);
-    struct send_entry *e = TAILQ_FIRST(&send_q);
+    insert_entry(map, t0, t1, time_diff(t1, t0), calc_power(map->source, 10), 0.003, 1, 1);
+    struct send_entry *e = TAILQ_FIRST(&map->queue);
     CU_ASSERT_PTR_NOT_NULL(e);
     CU_ASSERT_EQUAL(e->tlast.tv_sec, 1234567890);
     CU_ASSERT_EQUAL(e->tlast.tv_nsec, 123456789);
     CU_ASSERT_EQUAL(e->trec.tv_sec, 1234567900);
     CU_ASSERT_EQUAL(e->trec.tv_nsec, 123456789);
     CU_ASSERT_DOUBLE_EQUAL(e->dt, 10, 1e-6);
-    CU_ASSERT_DOUBLE_EQUAL(e->power, calc_power(10), 1e-6);
-    CU_ASSERT_EQUAL(e->pulseCount, 1);
+    CU_ASSERT_DOUBLE_EQUAL(e->power, calc_power(map->source, 10), 1e-6);
+    CU_ASSERT_EQUAL(e->pulse_count, 1);
     t0.tv_sec += 30;
-    insert_entry(t1, t0, 20, calc_power(20), 0.004, 2);
+    insert_entry(map, t1, t0, 20, calc_power(map->source, 20), 0.004, 2, 2);
     e = e->entries.tqe_next;
     CU_ASSERT_PTR_NOT_NULL(e);
     //    printf("S=%ld\n", e->trec.tv_sec);
@@ -133,114 +148,125 @@ void testINSERT_ENTRY(void) {
     CU_ASSERT_EQUAL(e->trec.tv_sec, 1234567920);
     CU_ASSERT_EQUAL(e->trec.tv_nsec, 123456789);
     CU_ASSERT_DOUBLE_EQUAL(e->dt, 20, 1e-6);
-    CU_ASSERT_DOUBLE_EQUAL(e->power, calc_power(20), 1e-6);
-    CU_ASSERT_EQUAL(e->pulseCount, 2);
+    CU_ASSERT_DOUBLE_EQUAL(e->power, calc_power(map->source, 20), 1e-6);
+    CU_ASSERT_EQUAL(e->pulse_count, 2);
 }
 
 void testBUILD_URL_EMONCMS(void) {
     memset(send_buf, 0, sizeof(send_buf));
     CU_ASSERT_EQUAL(init_config("tests/emonlight.conf"), 0);
-    cfg.verbose = 0;
-    TAILQ_INIT(&send_q);
+    struct server_entry *server = cfg.servers;
+    struct server_mapping_entry *map = server->maps;
+    cfg.verbose = 1;
     struct timespec t0 = {1234567890, 123456789};
     struct timespec t1 = {1234567900, 123456789};
-    insert_entry(t0, t1, 10, calc_power(10), 0.003, 1);
-    int cnt = build_url_emoncms();
-    //printf("P=%f, L=%d, QQ=%s\n", calc_power(10), strlen(send_buf), send_buf);
+    insert_entry(map, t0, t1, 10, calc_power(map->source, 10), 0.003, 1, 1);
+    int cnt = build_url_emoncms(server);
+    //printf("P=%f, L=%d, QQ=%s\n", calc_power(map->source, 10), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 1);
-    CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1]]&time=1234567891");
+    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1]]&time=1234567891&apikey=key-1");
 
     t0.tv_sec = t1.tv_sec + 1;
-    insert_entry(t1, t0, 1, calc_power(1), 0.004, 2);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567900);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567901);
-    cnt = build_url_emoncms();
-    //printf("P=%f, L=%d, QQ=%s\n", calc_power(1), strlen(send_buf), send_buf);
+    insert_entry(map, t1, t0, 1, calc_power(map->source, 1), 0.004, 2, 2);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->tlast.tv_sec, 1234567900);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->trec.tv_sec, 1234567901);
+    cnt = build_url_emoncms(server);
+    //printf("P=%f, L=%d, QQ=%s\n", calc_power(map->source, 1), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 2);
-    CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1],[10,56,3600.000000,0.004000,2]]&time=1234567891");
+    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2]]&time=1234567891&apikey=key-1");
 
     t1.tv_sec = t0.tv_sec + 3;
-    insert_entry(t0, t1, 3, calc_power(3), 0.005, 3);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567901);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
-    cnt = build_url_emoncms();
-    //printf("P=%f, L=%d, QQ=%s\n", calc_power(3), strlen(send_buf), send_buf);
+    insert_entry(map, t0, t1, 3, calc_power(map->source, 3), 0.005, 3, 3);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->tlast.tv_sec, 1234567901);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->trec.tv_sec, 1234567904);
+    cnt = build_url_emoncms(server);
+    //printf("P=%f, L=%d, QQ=%s\n", calc_power(map->source, 3), strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 3);
-    CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1],[10,56,3600.000000,0.004000,2],[11,56,1200.000000,0.005000,3],[13,56,1200.000000,0.005000,3]]&time=1234567891");
+    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2],[11,5,1200.000000,0.005000,3],[13,5,1200.000000,0.005000,3]]&time=1234567891&apikey=key-1");
 
     t0.tv_sec = t1.tv_sec;
     t0.tv_nsec += 500000000;
-    insert_entry(t1, t0, 0.5, calc_power(0.5), 0.006, 4);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
-    cnt = build_url_emoncms();
-    //printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(0.5), cnt, strlen(send_buf), send_buf);
+    insert_entry(map, t1, t0, 0.5, calc_power(map->source, 0.5), 0.006, 4, 4);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->tlast.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->trec.tv_sec, 1234567904);
+    cnt = build_url_emoncms(server);
+    //printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(map->source, 0.5), cnt, strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 4);
-    CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1],[10,56,3600.000000,0.004000,2],[11,56,1200.000000,0.005000,3],[13,56,1200.000000,0.005000,3],[14,56,7200.000000,0.006000,4]]&time=1234567891");
+    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2],[11,5,1200.000000,0.005000,3],[13,5,1200.000000,0.005000,3],[14,5,7200.000000,0.006000,4]]&time=1234567891&apikey=key-1");
 
     cfg.verbose = 0;
     t1.tv_sec++;
     t1.tv_nsec -= 100000000;
-    insert_entry(t0, t1, 0.4, calc_power(0.4), 0.007, 5);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567905);
-    cnt = build_url_emoncms();
-    //    printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(0.5), cnt, strlen(send_buf), send_buf);
+    insert_entry(map, t0, t1, 0.4, calc_power(map->source, 0.4), 0.007, 5, 5);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->tlast.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->trec.tv_sec, 1234567905);
+    cnt = build_url_emoncms(server);
+    //    printf("P=%f, CNT=%d, L=%d, QQ=%s\n", calc_power(map->source, 0.5), cnt, strlen(send_buf), send_buf);
     CU_ASSERT_EQUAL(cnt, 5);
-    CU_ASSERT_STRING_EQUAL(send_buf, "http://xx.yy.zz/input/bulk.json?apikey=1234567890KK&data=[[0,56,360.000000,0.003000,1],[9,56,360.000000,0.003000,1],[10,56,3600.000000,0.004000,2],[11,56,1200.000000,0.005000,3],[13,56,1200.000000,0.005000,3],[14,56,7200.000000,0.006000,4],[14,56,9000.000000,0.007000,5]]&time=1234567891");
+    CU_ASSERT_STRING_EQUAL(send_buf, "http://emoncms.org/input/bulk.json?data=[[0,5,360.000000,0.003000,1],[9,5,360.000000,0.003000,1],[10,5,3600.000000,0.004000,2],[11,5,1200.000000,0.005000,3],[13,5,1200.000000,0.005000,3],[14,5,7200.000000,0.006000,4],[14,5,9000.000000,0.007000,5]]&time=1234567891&apikey=key-1");
 }
 
 void testBUILD_URL_EMONLIGHT(void) {
     memset(send_buf, 0, sizeof(send_buf));
     CU_ASSERT_EQUAL(init_config("tests/emonlight.conf"), 0);
-    cfg.verbose = 0;
-    TAILQ_INIT(&send_q);
+    struct server_entry *server = cfg.servers;
+    struct server_mapping_entry *map = server->maps;
+    cfg.verbose = 1;
     struct timespec t0 = {1234567890, 123456789};
     struct timespec t1 = {1234567900, 123456789};
-    insert_entry(t0, t1, 10, calc_power(10), 0.003, 1);
-    int cnt = build_url_emonlight();
+    insert_entry(map, t0, t1, 10, calc_power(map->source, 10), 0.003, 1, 1);
+    CU_ASSERT_EQUAL(map->queue_length, 1);
+    int cnt = build_url_emonlight(server);
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 1);
-    CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000");
+    CU_ASSERT_EQUAL(map->queue_length, 1);
+    CU_ASSERT_EQUAL(map->queued, 1);
+    CU_ASSERT_STRING_EQUAL(send_buf, "{nodes: [{k:'key-1',id:5,d:[[1234567900,123456789,360.000000]]}]}");
 
+    map->queued = 0;
     t0.tv_sec = t1.tv_sec + 1;
-    insert_entry(t1, t0, 1, calc_power(1), 0.004, 2);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567900);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567901);
-    cnt = build_url_emonlight();
+    insert_entry(map, t1, t0, 1, calc_power(map->source, 1), 0.004, 2, 2);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->tlast.tv_sec, 1234567900);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->trec.tv_sec, 1234567901);
+    cnt = build_url_emonlight(server);
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 2);
-    CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000&epoch_time[]=1234567901%2C123456789&power=3600.000000");
+    CU_ASSERT_EQUAL(map->queue_length, 2);
+    CU_ASSERT_EQUAL(map->queued, 2);
+    CU_ASSERT_STRING_EQUAL(send_buf, "{nodes: [{k:'key-1',id:5,d:[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000]]}]}");
 
+    map->queued = 0;
     t1.tv_sec = t0.tv_sec + 3;
-    insert_entry(t0, t1, 3, calc_power(3), 0.005, 3);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567901);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
-    cnt = build_url_emonlight();
+    insert_entry(map, t0, t1, 3, calc_power(map->source, 3), 0.005, 3, 3);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->tlast.tv_sec, 1234567901);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->trec.tv_sec, 1234567904);
+    cnt = build_url_emonlight(server);
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 3);
-    CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000&epoch_time[]=1234567901%2C123456789&power=3600.000000&epoch_time[]=1234567904%2C123456789&power=1200.000000");
+    CU_ASSERT_STRING_EQUAL(send_buf, "{nodes: [{k:'key-1',id:5,d:[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000],[1234567904,123456789,1200.000000]]}]}");
 
+    map->queued = 0;
     t0.tv_sec = t1.tv_sec;
     t0.tv_nsec += 500000000;
-    insert_entry(t1, t0, 0.5, calc_power(0.5), 0.006, 4);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567904);
-    cnt = build_url_emonlight();
+    insert_entry(map, t1, t0, 0.5, calc_power(map->source, 0.5), 0.006, 4, 4);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->tlast.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->trec.tv_sec, 1234567904);
+    cnt = build_url_emonlight(server);
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 4);
-    CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000&epoch_time[]=1234567901%2C123456789&power=3600.000000&epoch_time[]=1234567904%2C123456789&power=1200.000000&epoch_time[]=1234567904%2C623456789&power=7200.000000");
+    CU_ASSERT_STRING_EQUAL(send_buf, "{nodes: [{k:'key-1',id:5,d:[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000],[1234567904,123456789,1200.000000],[1234567904,623456789,7200.000000]]}]}");
 
     cfg.verbose = 0;
+    map->queued = 0;
     t1.tv_sec++;
     t1.tv_nsec -= 100000000;
-    insert_entry(t0, t1, 0.4, calc_power(0.4), 0.007, 5);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->tlast.tv_sec, 1234567904);
-    CU_ASSERT_EQUAL(TAILQ_LAST(&send_q, send_queue)->trec.tv_sec, 1234567905);
-    cnt = build_url_emonlight();
+    insert_entry(map, t0, t1, 0.4, calc_power(map->source, 0.4), 0.007, 5, 5);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->tlast.tv_sec, 1234567904);
+    CU_ASSERT_EQUAL(TAILQ_LAST(&map->queue, send_queue)->trec.tv_sec, 1234567905);
+    cnt = build_url_emonlight(server);
 //    printf("Q='%s'\n", send_buf);
     CU_ASSERT_EQUAL(cnt, 5);
-    CU_ASSERT_STRING_EQUAL(send_buf, "token=1234567890KK&node_id=56&epoch_time[]=1234567900%2C123456789&power=360.000000&epoch_time[]=1234567901%2C123456789&power=3600.000000&epoch_time[]=1234567904%2C123456789&power=1200.000000&epoch_time[]=1234567904%2C623456789&power=7200.000000&epoch_time[]=1234567905%2C23456789&power=9000.000000");
+    CU_ASSERT_STRING_EQUAL(send_buf, "{nodes: [{k:'key-1',id:5,d:[[1234567900,123456789,360.000000],[1234567901,123456789,3600.000000],[1234567904,123456789,1200.000000],[1234567904,623456789,7200.000000],[1234567905,23456789,9000.000000]]}]}");
 }
 
 void testBUZZER_CALC_PULSES(void) {

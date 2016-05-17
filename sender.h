@@ -28,23 +28,11 @@
 extern "C" {
 #endif
 
+#include "read_config.h"
 #include <time.h>
 #include <sys/queue.h>
 
-struct send_entry {
-    TAILQ_ENTRY(send_entry) entries;
-    struct timespec tlast;
-    struct timespec trec;
-    double dt;
-    double power;
-    double elapsedkWh;
-    long pulseCount;
-    long rawCount;
-};
-
-TAILQ_HEAD(send_queue, send_entry);
-
-extern struct send_entry* populate_entry(struct send_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsedkWh, long pulseCount, long rawCount);
+extern struct send_entry* populate_entry(struct send_entry *entry, struct timespec tlast, struct timespec trec, double dt, double power, double elapsed_kWh, long pulse_count, long raw_count);
 
 extern void sender_at_exit();
 extern void sender_init();
